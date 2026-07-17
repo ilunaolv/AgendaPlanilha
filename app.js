@@ -1,25 +1,51 @@
 /* =========================================================================
    Agenda do Prefeito — PWA
    Lê a aba "Prefeito" de uma planilha Google Sheets autenticada via Google.
-   As credenciais vêm de config.js (ver config.example.js). Não versionar config.js.
+   Compatível com iOS/Safari. Credenciais em config.js (ver config.example.js).
    ========================================================================= */
 
-// CONFIG é carregado de window.AGENDACONFIG (config.js, ignorado pelo git).
 const CONFIG = window.AGENDACONFIG || {};
-// Lista de pessoas para selecionar como substituto (um ou mais).
 const PEOPLE = (window.AGENDACONFIG && window.AGENDACONFIG.PEOPLE) || [];
 
 const GAPI_LOADER = "https://apis.google.com/js/api.js";
+const GIS_LOADER = "https://accounts.google.com/gsi/client";
 
 let tokenClient = null;
 let accessToken = null;
+let tokenExpiry = 0;
 let eventsByDate = new Map();
 let selectedDate = startOfDay(new Date());
-let viewMode = "dia"; // "dia" | "semana" | "mes"
+let viewMode = "dia";
 let lastSync = null;
 let refreshTimer = null;
 
-/* ---------- utilidades de data / excel ---------- */
+/* ---------- persistência de token (evita re-login no refresh) ---------- */
+
+function saveToken(tok, expiresIn) {
+  accessToken = tok;
+  tokenExpiry = Date.now() + (expiresIn || 3600) * 1000;
+  try {
+    localStorage.setItem("agenda_token", JSON.stringify({ tok, exp: tokenExpiry }));
+  } catch (_) {}
+}
+function loadToken() {
+  try {
+    const raw = localStorage.getItem("agenda_token");
+    if (!raw) return false;
+    const { tok, exp } = JSON.parse(raw);
+    if (!tok || Date.now() > exp - 5000) return false;
+    accessToken = tok;
+    tokenExpiry = exp;
+    return true;
+  } catch (_) { return false; }
+}
+function clearToken() {
+  accessToken = null;
+  tokenExpiry = 0;
+  try { localStorage.removeItem("agenda_token"); } catch (_) {}
+}
+
+/* ---------- utilidades de data ---------- */
 
 function startOfDay(d) {
   const x = new Date(d);
@@ -33,7 +59,7 @@ function addDays(d, n) {
 }
 function startOfWeek(d) {
   const x = startOfDay(d);
-  const dow = (x.getDay() + 6) % 7; // segunda = 0
+  const dow = (x.getDay() + 6) % 7;
   return addDays(x, -dow);
 }
 function startOfMonth(d) {
@@ -66,8 +92,7 @@ function excelSerialToDate(serial) {
     const base = new Date(1899, 11, 30, 0, 0, 0, 0);
     return startOfDay(new Date(base.getTime() + Math.round(asNum) * 86400000));
   }
-  let d = parseFlexDate(raw);
-  return d ? startOfDay(d) : null;
+  return parseFlexDate(raw);
 }
 function parseFlexDate(s) {
   if (!s) return null;
@@ -103,13 +128,18 @@ function noteNum(s) {
 function timeKey(s) {
   return (s || "99").replace(/[^0-9]/g, "").padStart(4, "0");
 }
-// Ordena por nota desc (10->0), depois horário asc.
 function sortEvents(arr) {
   return [...arr].sort((a, b) => {
     const dn = noteNum(b.note) - noteNum(a.note);
     if (dn !== 0) return dn;
     return timeKey(a.time).localeCompare(timeKey(b.time));
   });
+}
+function normPresence(p) {
+  if (p === "Sim") return "Sim";
+  if (p === "Reservar") return "Reservar";
+  if (p === "Não" || p === "Nao") return "Não";
+  return "";
 }
 
 /* ---------- UI ---------- */
@@ -122,6 +152,12 @@ function toast(msg) {
   clearTimeout(t._t);
   t._t = setTimeout(() => t.classList.remove("show"), 2600);
 }
+function showLoading(on, msg) {
+  const o = el("loadingOverlay");
+  if (!o) return;
+  o.querySelector(".loading-msg").textContent = msg || "Carregando…";
+  o.style.display = on ? "flex" : "none";
+}
 function show(view) {
   el("loginWrap").style.display = view === "login" ? "flex" : "none";
   el("app").style.display = view === "app" ? "block" : "none";
@@ -131,33 +167,35 @@ function show(view) {
 }
 
 function eventCard(e) {
-  const isNo = e.presence === "Não" || e.presence === "Nao";
+  const p = normPresence(e.presence);
+  const isNo = p === "Não";
   const badge =
-    e.presence === "Sim"
-      ? `<span class="badge sim">Confirmado</span>`
-      : e.presence === "Reservar"
-      ? `<span class="badge res">Reservar</span>`
-      : isNo
-      ? `<span class="badge nao">Não comparece</span>`
-      : "";
+    p === "Sim" ? `<span class="badge sim">Confirmado</span>`
+    : p === "Reservar" ? `<span class="badge res">Reservar</span>`
+    : isNo ? `<span class="badge nao">Não comparece</span>` : "";
   const noteVal = noteNum(e.note);
   const noteCls = noteVal >= 7 ? "note hi" : "note";
   const note = e.note ? `<span class="tag ${noteCls}">📝 Nota ${escapeHtml(e.note)}</span>` : "";
+  const loc = e.local ? `<span class="tag loc">📍 ${escapeHtml(e.local)}</span>` : "";
   const sub = isNo && e.rep ? `<span class="tag rep">➡️ No lugar: ${escapeHtml(e.rep)}</span>` : "";
   const repTag = !isNo && e.rep ? `<span class="tag rep">👤 ${escapeHtml(e.rep)}</span>` : "";
+  // Botões de status com estado ativo
+  const act = (val) => `mini${p === val ? " active-" + val.toLowerCase() : ""}`;
   const subField = isNo
     ? `<button class="pickbtn" data-row="${e.rowIndex}">Selecionar quem vai no lugar</button>`
     : "";
+  const locBtn = `<button class="locbtn" data-row="${e.rowIndex}">📍 ${e.local ? "Alterar local" : "Informar local"}</button>`;
   return `
   <div class="card">
     <div class="time">🕑 ${escapeHtml(e.time || "—")} ${badge}</div>
     <div class="event">${escapeHtml(e.event || "(sem título)")}</div>
-    <div class="meta">${note}${repTag}${sub}</div>
+    <div class="meta">${note}${loc}${repTag}${sub}</div>
     <div class="actions">
-      <button class="mini" data-act="sim" data-row="${e.rowIndex}">✓ Vou</button>
-      <button class="mini" data-act="nao" data-row="${e.rowIndex}">✕ Não vou</button>
-      <button class="mini" data-act="res" data-row="${e.rowIndex}">⏳ Reservar</button>
+      <button class="${act("Sim")}" data-act="sim" data-row="${e.rowIndex}">✓ Vou</button>
+      <button class="${act("Não")}" data-act="nao" data-row="${e.rowIndex}">✕ Não vou</button>
+      <button class="${act("Reservar")}" data-act="res" data-row="${e.rowIndex}">⏳ Reservar</button>
     </div>
+    ${locBtn}
     ${subField}
   </div>`;
 }
@@ -171,11 +209,9 @@ function render() {
     title.textContent = fmtBig(selectedDate);
     sub.textContent = fmtSmall(selectedDate);
     const evs = sortEvents(eventsByDate.get(isoKey(selectedDate)) || []);
-    if (!evs.length) {
-      list.innerHTML = `<div class="empty">Nenhum compromisso para este dia.</div>`;
-    } else {
-      list.innerHTML = evs.map(eventCard).join("");
-    }
+    list.innerHTML = evs.length
+      ? evs.map(eventCard).join("")
+      : `<div class="empty">Nenhum compromisso para este dia.</div>`;
   } else if (viewMode === "semana") {
     const start = startOfWeek(selectedDate);
     const end = addDays(start, 6);
@@ -223,17 +259,18 @@ function render() {
 function wireCards(list) {
   list.querySelectorAll("button[data-act]").forEach((b) => {
     b.onclick = async () => {
-      const row = Number(b.dataset.row);
-      const ev = findEventByRow(row);
+      const ev = findEventByRow(Number(b.dataset.row));
       if (!ev) return;
       ev.presence = b.dataset.act === "sim" ? "Sim" : b.dataset.act === "nao" ? "Não" : "Reservar";
-      // Ao sair de "Não", limpa o substituto na planilha.
       if (ev.presence !== "Não") ev.rep = "";
       await saveEvent(ev);
     };
   });
   list.querySelectorAll("button.pickbtn").forEach((b) => {
     b.onclick = () => openPicker(Number(b.dataset.row));
+  });
+  list.querySelectorAll("button.locbtn").forEach((b) => {
+    b.onclick = () => openLoc(Number(b.dataset.row));
   });
 }
 
@@ -255,7 +292,7 @@ function updateSyncInfo() {
     : "";
 }
 
-/* ---------- modal de seleção de substituto ---------- */
+/* ---------- modais ---------- */
 
 function openPicker(row) {
   const ev = findEventByRow(row);
@@ -263,7 +300,6 @@ function openPicker(row) {
   const current = (ev.rep || "").split(",").map((s) => s.trim()).filter(Boolean);
   const others = current.filter((c) => !PEOPLE.includes(c));
   const sel = new Set(current);
-
   const overlay = document.createElement("div");
   overlay.className = "overlay";
   let opts = PEOPLE.map((p) =>
@@ -286,11 +322,9 @@ function openPicker(row) {
       </div>
     </div>`;
   document.body.appendChild(overlay);
-
   const outro = overlay.querySelector("#pickOutro");
   const outroTxt = overlay.querySelector("#pickOutroTxt");
   outro.onchange = () => { outroTxt.style.display = outro.checked ? "block" : "none"; };
-
   overlay.querySelector("#pickCancel").onclick = () => overlay.remove();
   overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
   overlay.querySelector("#pickOk").onclick = async () => {
@@ -299,6 +333,30 @@ function openPicker(row) {
     if (outro.checked && outroTxt.value.trim()) chosen.push(outroTxt.value.trim());
     ev.rep = chosen.join(", ");
     ev.presence = "Não";
+    overlay.remove();
+    await saveEvent(ev);
+  };
+}
+
+function openLoc(row) {
+  const ev = findEventByRow(row);
+  if (!ev) return;
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  overlay.innerHTML = `
+    <div class="modal">
+      <h3>Local do evento</h3>
+      <input class="subinput" id="locTxt" placeholder="Ex: Paço Municipal" value="${escapeHtml(ev.local || "")}" style="width:100%" />
+      <div class="modal-actions">
+        <button id="locCancel">Cancelar</button>
+        <button class="primary" id="locOk">Salvar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector("#locCancel").onclick = () => overlay.remove();
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  overlay.querySelector("#locOk").onclick = async () => {
+    ev.local = overlay.querySelector("#locTxt").value.trim();
     overlay.remove();
     await saveEvent(ev);
   };
@@ -329,17 +387,15 @@ async function ensureGapi() {
 }
 async function ensureGsi() {
   if (typeof google === "undefined" || !google.accounts || !google.accounts.oauth2) {
-    await loadScript("https://accounts.google.com/gsi/client");
+    await loadScript(GIS_LOADER);
   }
 }
 
 async function initAuth() {
-  if (!CONFIG.CLIENT_ID || CONFIG.CLIENT_ID.includes("SEU_CLIENT_ID")) {
+  if (!CONFIG.CLIENT_ID || CONFIG.CLIENT_ID.includes("SEU_CLIENT_ID"))
     throw new Error("Crie config.js a partir de config.example.js e preencha CLIENT_ID.");
-  }
-  if (!CONFIG.SPREADSHEET_ID || CONFIG.SPREADSHEET_ID.includes("ID_DA_PLANILHA")) {
+  if (!CONFIG.SPREADSHEET_ID || CONFIG.SPREADSHEET_ID.includes("ID_DA_PLANILHA"))
     throw new Error("Crie config.js a partir de config.example.js e preencha SPREADSHEET_ID.");
-  }
   await ensureGapi();
   await ensureGsi();
   console.log("[agenda] gapi + gsi prontos");
@@ -348,8 +404,8 @@ async function initAuth() {
       client_id: CONFIG.CLIENT_ID,
       scope: CONFIG.SCOPES,
       callback: async (resp) => {
-        if (resp.error) { toast("Erro de login: " + resp.error); return; }
-        accessToken = resp.access_token;
+        if (resp.error) { toast("Erro de login: " + resp.error); showLoading(false); return; }
+        saveToken(resp.access_token, resp.expires_in);
         gapi.client.setToken({ access_token: accessToken });
         await afterLogin();
       },
@@ -358,7 +414,7 @@ async function initAuth() {
 }
 
 async function afterLogin() {
-  show("loader");
+  showLoading(true, "Carregando agenda…");
   try {
     await loadEvents();
     const keys = [...eventsByDate.keys()].sort();
@@ -369,6 +425,8 @@ async function afterLogin() {
   } catch (e) {
     toast("Não foi possível carregar: " + e.message);
     show("app");
+  } finally {
+    showLoading(false);
   }
 }
 
@@ -377,21 +435,25 @@ async function signIn() {
   try {
     if (!tokenClient) { toast("Preparando login…"); await initAuth(); }
     if (!tokenClient) { toast("Falha ao preparar login."); return; }
+    showLoading(true, "Aguardando login…");
     tokenClient.requestAccessToken({ prompt: "" });
   } catch (e) {
     console.error("[agenda] erro signIn:", e);
     toast("Erro: " + e.message);
+    showLoading(false);
   }
 }
 function signOut() {
-  if (accessToken) { google.accounts.oauth2.revoke(accessToken, () => {}); gapi.client.setToken(null); }
+  clearToken();
+  if (accessToken) { try { google.accounts.oauth2.revoke(accessToken, () => {}); } catch (_) {} }
+  gapi.client.setToken(null);
   accessToken = null;
   clearInterval(refreshTimer);
   show("login");
 }
 
 async function loadEvents() {
-  const range = `'${CONFIG.SHEET_NAME}'!A:F`;
+  const range = `'${CONFIG.SHEET_NAME}'!A:G`;
   const r = await gapi.client.sheets.spreadsheets.values.get({
     spreadsheetId: CONFIG.SPREADSHEET_ID,
     range,
@@ -399,11 +461,10 @@ async function loadEvents() {
   const rows = r.result.values || [];
   console.log("[agenda] linhas lidas:", rows.length);
   eventsByDate = new Map();
-  let ignored = 0, validEvents = 0;
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     const date = excelSerialToDate(row[0]);
-    if (!date) { ignored++; continue; }
+    if (!date) continue;
     const ev = {
       rowIndex: i + 1,
       time: (row[1] || "").trim(),
@@ -411,14 +472,14 @@ async function loadEvents() {
       note: (row[3] || "").trim(),
       presence: (row[4] || "").trim(),
       rep: (row[5] || "").trim(),
+      local: (row[6] || "").trim(), // G = Local
     };
     if (!ev.event && !ev.time) continue;
-    validEvents++;
     const key = isoKey(date);
     if (!eventsByDate.has(key)) eventsByDate.set(key, []);
     eventsByDate.get(key).push(ev);
   }
-  console.log("[agenda] eventos válidos:", validEvents, "| datas:", eventsByDate.size);
+  console.log("[agenda] datas:", eventsByDate.size);
   lastSync = new Date();
   updateSyncInfo();
 }
@@ -426,21 +487,31 @@ async function loadEvents() {
 async function saveEvent(ev) {
   if (!ev.rowIndex) { toast("Evento sem linha associada."); return; }
   const sheet = CONFIG.SHEET_NAME;
-  await gapi.client.sheets.spreadsheets.values.update({
-    spreadsheetId: CONFIG.SPREADSHEET_ID,
-    range: `'${sheet}'!E${ev.rowIndex}`,
-    valueInputOption: "RAW",
-    values: [[ev.presence]],
-  });
-  await gapi.client.sheets.spreadsheets.values.update({
-    spreadsheetId: CONFIG.SPREADSHEET_ID,
-    range: `'${sheet}'!F${ev.rowIndex}`,
-    valueInputOption: "RAW",
-    values: [[ev.rep || ""]],
-  });
-  toast("Salvo na planilha ✓");
-  await loadEvents();
-  render();
+  showLoading(true, "Salvando…");
+  try {
+    await gapi.client.sheets.spreadsheets.values.update({
+      spreadsheetId: CONFIG.SPREADSHEET_ID,
+      range: `'${sheet}'!E${ev.rowIndex}`,
+      valueInputOption: "RAW", values: [[ev.presence]],
+    });
+    await gapi.client.sheets.spreadsheets.values.update({
+      spreadsheetId: CONFIG.SPREADSHEET_ID,
+      range: `'${sheet}'!F${ev.rowIndex}`,
+      valueInputOption: "RAW", values: [[ev.rep || ""]],
+    });
+    await gapi.client.sheets.spreadsheets.values.update({
+      spreadsheetId: CONFIG.SPREADSHEET_ID,
+      range: `'${sheet}'!G${ev.rowIndex}`,
+      valueInputOption: "RAW", values: [[ev.local || ""]],
+    });
+    toast("Salvo na planilha ✓");
+    await loadEvents();
+    render();
+  } catch (e) {
+    toast("Erro ao salvar: " + e.message);
+  } finally {
+    showLoading(false);
+  }
 }
 
 function scheduleRefresh() {
@@ -475,7 +546,7 @@ function setMode(m) {
   render();
 }
 
-/* ---------- tema (claro/escuro) ---------- */
+/* ---------- tema ---------- */
 
 function applyTheme(light) {
   document.body.classList.toggle("light", light);
@@ -491,15 +562,16 @@ function initTheme() {
 
 /* ---------- bootstrap (iOS-safe) ---------- */
 
-function boot() {
+async function boot() {
   initTheme();
   el("loginBtn").onclick = signIn;
   el("loginBtn2").onclick = signIn;
   el("logoutBtn").onclick = signOut;
   el("refreshBtn").onclick = async () => {
-    toast("Atualizando…");
+    showLoading(true, "Atualizando…");
     try { await loadEvents(); render(); toast("Atualizado"); }
     catch (e) { toast("Erro ao atualizar"); }
+    finally { showLoading(false); }
   };
   el("prevDay").onclick = navPrev;
   el("nextDay").onclick = navNext;
@@ -507,20 +579,30 @@ function boot() {
   document.querySelectorAll(".modebtn").forEach((b) => {
     b.onclick = () => setMode(b.dataset.mode);
   });
-
   window.addEventListener("online", () => {
     el("offlinePill").classList.remove("show");
     if (accessToken) loadEvents().then(render).catch(() => {});
   });
   window.addEventListener("offline", () => el("offlinePill").classList.add("show"));
 
-  show("login");
-  initAuth()
-    .then(() => console.log("[agenda] pronto para login"))
-    .catch((e) => {
-      console.error("[agenda] erro initAuth:", e);
-      toast("Erro ao iniciar: " + e.message);
-    });
+  // Se já tem token válido, entra direto sem popup (evita re-login no refresh).
+  if (loadToken()) {
+    show("loader");
+    try {
+      await ensureGapi();
+      gapi.client.setToken({ access_token: accessToken });
+      await afterLogin();
+    } catch (e) {
+      console.error("[agenda] falha ao reusar token:", e);
+      clearToken();
+      show("login");
+    }
+  } else {
+    show("login");
+    initAuth()
+      .then(() => console.log("[agenda] pronto para login"))
+      .catch((e) => { console.error("[agenda] erro initAuth:", e); toast("Erro ao iniciar: " + e.message); });
+  }
 }
 
 if (document.readyState === "loading") {
