@@ -72,6 +72,8 @@ O repositório já está em `https://github.com/ilunaolv/AgendaPlanilha`.
    `https://ilunaolv.github.io` (e a URL exata acima).
 5. Abra no celular (Chrome/Safari) → menu → **Adicionar à tela inicial**.
 
+Deploy: último push em `main` dispara o build do Pages automaticamente.
+
 Arquivos ignorados pelo `.gitignore`: `agenda.xlsx`, `~$agenda.xlsx`, etc.
 
 ## Arquivos
