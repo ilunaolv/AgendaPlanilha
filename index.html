@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f766e" />
+  <title>Agenda do Prefeito</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --panel: #141b22;
+      --panel-2: #1b242d;
+      --card: #1f2a34;
+      --accent: #0f766e;
+      --accent-2: #14b8a6;
+      --text: #e7eef3;
+      --muted: #8aa0ad;
+      --line: #243240;
+      --danger: #ef4444;
+      --warn: #f59e0b;
+      --danger-bg: #2a1416;
+      --warn-bg: #2a2110;
+    }
+    body.light {
+      --bg: #f1f5f9;
+      --panel: #ffffff;
+      --panel-2: #e9eef3;
+      --card: #ffffff;
+      --accent: #0f766e;
+      --accent-2: #0d9488;
+      --text: #0f172a;
+      --muted: #5b6b78;
+      --line: #d4dce4;
+      --danger: #dc2626;
+      --warn: #d97706;
+      --danger-bg: #fde8e8;
+      --warn-bg: #fdf1e1;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      transition: background .2s, color .2s;
+    }
+    header {
+      position: sticky; top: 0; z-index: 10;
+      background: linear-gradient(180deg, #0f766e, #0b5550);
+      padding: 14px 16px;
+      display: flex; align-items: center; gap: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,.35);
+    }
+    header h1 { font-size: 1.05rem; margin: 0; flex: 1; letter-spacing: .3px; color: #fff; }
+    header .spacer { flex: 1; }
+    button {
+      font: inherit; border: 0; border-radius: 10px; padding: 10px 14px;
+      background: rgba(255,255,255,.14); color: #fff; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 8px; transition: background .15s;
+    }
+    button:hover { background: rgba(255,255,255,.24); }
+    button.primary { background: var(--accent-2); color: #04201d; font-weight: 600; }
+    button.primary:hover { background: #2dd4bf; }
+    .container { max-width: 760px; margin: 0 auto; padding: 16px; }
+    .modenav { display: flex; gap: 6px; margin-bottom: 12px; }
+    .modebtn {
+      flex: 1; justify-content: center; background: var(--panel-2); color: var(--muted);
+      border: 1px solid var(--line); font-size: .85rem; padding: 9px 8px;
+    }
+    .modebtn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .daynav { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+    .daynav .date { flex: 1; text-align: center; }
+    .daynav .date .big { font-size: 1.15rem; font-weight: 700; }
+    .daynav .date .small { color: var(--muted); font-size: .82rem; }
+    .daynav button { padding: 10px 14px; background: var(--panel-2); color: var(--text); }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+      padding: 14px; margin-bottom: 12px; position: relative; overflow: hidden;
+    }
+    .card .time {
+      font-weight: 700; color: var(--accent-2); font-size: 1.02rem; margin-bottom: 4px;
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .card .event { font-size: 1rem; line-height: 1.35; }
+    .card .meta { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .tag {
+      font-size: .78rem; padding: 4px 9px; border-radius: 999px;
+      background: var(--panel-2); color: var(--muted); border: 1px solid var(--line);
+    }
+    .tag.note { color: var(--muted); }
+    .tag.note.hi { color: #04201d; background: var(--accent-2); border-color: var(--accent-2); font-weight: 700; }
+    .tag.rep { background: #14323a; color: #5eead4; border-color: #145e57; }
+    body.light .tag.rep { background: #d7f5f0; color: #0d6e63; border-color: #a7e3da; }
+    .badge { font-size: .72rem; padding: 3px 8px; border-radius: 999px; font-weight: 600; }
+    .badge.sim { background: #0f3d2e; color: #4ade80; }
+    .badge.res { background: var(--warn-bg); color: var(--warn); }
+    .badge.nao { background: var(--danger-bg); color: var(--danger); }
+    body.light .badge.sim { background: #d6f5e3; color: #15803d; }
+    .card .actions { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .card .mini {
+      background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+      padding: 7px 10px; border-radius: 9px; font-size: .82rem; cursor: pointer;
+    }
+    .card .mini:hover { background: #243240; }
+    .card .subbox { margin-top: 10px; display: flex; gap: 6px; }
+    .card .subinput {
+      flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--line);
+      border-radius: 9px; padding: 9px 11px; font: inherit;
+    }
+    .card .savebtn { background: var(--accent); color: #fff; padding: 9px 14px; border-radius: 9px; }
+    .card .savebtn:hover { background: #0d8378; }
+    .period { margin-bottom: 16px; }
+    .period-head {
+      display: flex; align-items: center; gap: 10px; padding: 6px 4px 10px;
+      border-bottom: 1px solid var(--line); margin-bottom: 12px;
+    }
+    .period-head .pd { font-size: .8rem; color: var(--muted); text-transform: capitalize; }
+    .period-head .pd-num {
+      font-size: 1.2rem; font-weight: 800; color: var(--text);
+      background: var(--panel-2); border-radius: 8px; padding: 1px 9px;
+    }
+    .period-head .pd-count { margin-left: auto; font-size: .78rem; color: var(--accent-2); }
+    .empty { text-align: center; color: var(--muted); padding: 40px 16px; font-size: .95rem; }
+    .empty.small { padding: 8px 0; font-size: .85rem; opacity: .6; }
+    .loader { text-align: center; color: var(--muted); padding: 40px; font-size: 1rem; }
+    .toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+      padding: 12px 18px; border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.4);
+      z-index: 50; opacity: 0; transition: opacity .25s, transform .25s; pointer-events: none;
+      max-width: 90vw;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .login-wrap {
+      min-height: 70vh; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; text-align: center; gap: 18px; padding: 24px;
+    }
+    .login-wrap .logo { width: 84px; height: 84px; }
+    .login-wrap p { color: var(--muted); max-width: 380px; line-height: 1.5; }
+    .offline-pill {
+      font-size: .72rem; padding: 3px 9px; border-radius: 999px;
+      background: var(--warn-bg); color: var(--warn); margin-left: 8px; display: none;
+    }
+    .offline-pill.show { display: inline-block; }
+    footer { text-align: center; color: var(--muted); font-size: .75rem; padding: 20px; }
+    .sync { font-size: .75rem; color: var(--muted); margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Agenda do Prefeito<span class="offline-pill" id="offlinePill">offline</span></h1>
+    <div class="spacer"></div>
+    <button id="themeBtn" title="Alternar tema">🌙</button>
+    <button id="refreshBtn" title="Atualizar">↻</button>
+    <button id="loginBtn" class="primary">Entrar com Google</button>
+    <button id="logoutBtn" style="display:none">Sair</button>
+  </header>
+
+  <main class="container" id="main">
+    <div class="login-wrap" id="loginWrap" style="display:none">
+      <img class="logo" src="icon.svg" alt="logo" />
+      <h2>Agenda do Prefeito</h2>
+      <p>Faça login com sua conta Google para visualizar a agenda sincronizada com a planilha, sempre atualizada.</p>
+      <button class="primary" id="loginBtn2">Entrar com Google</button>
+    </div>
+
+    <div id="app" style="display:none">
+      <div class="modenav">
+        <button class="modebtn active" data-mode="dia">Dia</button>
+        <button class="modebtn" data-mode="semana">Semana</button>
+        <button class="modebtn" data-mode="mes">Mês</button>
+      </div>
+      <div class="daynav">
+        <button id="prevDay">‹</button>
+        <div class="date">
+          <div class="big" id="dateBig">—</div>
+          <div class="small" id="dateSmall"></div>
+        </div>
+        <button id="todayBtn">Hoje</button>
+        <button id="nextDay">›</button>
+      </div>
+      <div class="sync" id="syncInfo"></div>
+      <div id="list"></div>
+    </div>
+
+    <div class="loader" id="loader" style="display:none">Carregando agenda…</div>
+  </main>
+
+  <footer>Agenda do Prefeito · PWA</footer>
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "Agenda do Prefeito",
+  "short_name": "AgendaPref",
+  "description": "Visualização de agenda sincronizada com a planilha (aba Prefeito).",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0f14",
+  "theme_color": "#0f766e",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

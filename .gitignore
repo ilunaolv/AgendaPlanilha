@@ -1,0 +1,13 @@
+# Arquivos do Excel / temporários
+agenda.xlsx
+~$agenda.xlsx
+*.xlsx
+__pycache__/
+*.pyc
+
+# SO
+.DS_Store
+Thumbs.db
+
+# Node (se usar)
+node_modules/
