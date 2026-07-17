@@ -7,5 +7,10 @@ window.AGENDACONFIG = {
   SCOPES: "https://www.googleapis.com/auth/spreadsheets",
   REFRESH_MIN: 15,
   // Nomes disponíveis para selecionar como substituto (um ou mais).
-  PEOPLE: ["Ana Souza", "Rodrigão", "Izumi"],
+  // Para adicionar mais, basta incluir novas linhas neste array.
+  PEOPLE: [
+    "Ronaldo Ferreira de Alcantara - SEAD",
+    "Gisele Domingues - SEAS",
+    "João Alves Corrêa Neto - SEAI",
+  ],
 };
