@@ -1,4 +1,5 @@
 {
+  "id": "/AgendaPlanilha/",
   "name": "Agenda do Prefeito",
   "short_name": "AgendaPref",
   "description": "Visualização de agenda sincronizada com a planilha (aba Prefeito).",
