@@ -1,15 +1,11 @@
 /* =========================================================================
    Agenda do Prefeito — PWA
    Lê a aba "Prefeito" de uma planilha Google Sheets autenticada via Google.
+   As credenciais vêm de config.js (ver config.example.js). Não versionar config.js.
    ========================================================================= */
 
-const CONFIG = {
-  CLIENT_ID: "999069950449-9i9pe1l5qvg09cvs0mtpli3s59i6p27r.apps.googleusercontent.com",
-  SPREADSHEET_ID: "12B32YPPSnTrhSrV3u8tn87nd5nfKssv_vuUAe4_4YBQ",
-  SHEET_NAME: "Prefeito (Em testes)",
-  SCOPES: "https://www.googleapis.com/auth/spreadsheets",
-  REFRESH_MIN: 15,
-};
+// CONFIG é carregado de window.AGENDACONFIG (config.js, ignorado pelo git).
+const CONFIG = window.AGENDACONFIG || {};
 
 const GAPI_LOADER = "https://apis.google.com/js/api.js";
 
@@ -295,10 +291,12 @@ async function ensureGsi() {
 }
 
 async function initAuth() {
-  if (!CONFIG.CLIENT_ID || CONFIG.CLIENT_ID.includes("COLOQUE_SEU"))
-    throw new Error("Configure CLIENT_ID no app.js.");
-  if (!CONFIG.SPREADSHEET_ID || CONFIG.SPREADSHEET_ID.includes("COLOQUE_O"))
-    throw new Error("Configure SPREADSHEET_ID no app.js.");
+  if (!CONFIG.CLIENT_ID || CONFIG.CLIENT_ID.includes("SEU_CLIENT_ID")) {
+    throw new Error("Crie config.js a partir de config.example.js e preencha CLIENT_ID.");
+  }
+  if (!CONFIG.SPREADSHEET_ID || CONFIG.SPREADSHEET_ID.includes("ID_DA_PLANILHA")) {
+    throw new Error("Crie config.js a partir de config.example.js e preencha SPREADSHEET_ID.");
+  }
   await ensureGapi();
   await ensureGsi();
   console.log("[agenda] gapi + gsi prontos");
