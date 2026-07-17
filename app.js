@@ -6,6 +6,8 @@
 
 // CONFIG é carregado de window.AGENDACONFIG (config.js, ignorado pelo git).
 const CONFIG = window.AGENDACONFIG || {};
+// Lista de pessoas para selecionar como substituto (um ou mais).
+const PEOPLE = (window.AGENDACONFIG && window.AGENDACONFIG.PEOPLE) || [];
 
 const GAPI_LOADER = "https://apis.google.com/js/api.js";
 
@@ -144,10 +146,7 @@ function eventCard(e) {
   const sub = isNo && e.rep ? `<span class="tag rep">➡️ No lugar: ${escapeHtml(e.rep)}</span>` : "";
   const repTag = !isNo && e.rep ? `<span class="tag rep">👤 ${escapeHtml(e.rep)}</span>` : "";
   const subField = isNo
-    ? `<div class="subbox">
-         <input class="subinput" data-row="${e.rowIndex}" placeholder="Quem vai no seu lugar?" value="${escapeHtml(e.rep)}" />
-         <button class="savebtn" data-row="${e.rowIndex}">Salvar</button>
-       </div>`
+    ? `<button class="pickbtn" data-row="${e.rowIndex}">Selecionar quem vai no lugar</button>`
     : "";
   return `
   <div class="card">
@@ -228,18 +227,13 @@ function wireCards(list) {
       const ev = findEventByRow(row);
       if (!ev) return;
       ev.presence = b.dataset.act === "sim" ? "Sim" : b.dataset.act === "nao" ? "Não" : "Reservar";
+      // Ao sair de "Não", limpa o substituto na planilha.
+      if (ev.presence !== "Não") ev.rep = "";
       await saveEvent(ev);
     };
   });
-  list.querySelectorAll("button.savebtn").forEach((b) => {
-    b.onclick = async () => {
-      const row = Number(b.dataset.row);
-      const ev = findEventByRow(row);
-      if (!ev) return;
-      const input = list.querySelector(`input.subinput[data-row="${row}"]`);
-      ev.rep = input ? input.value.trim() : "";
-      await saveEvent(ev);
-    };
+  list.querySelectorAll("button.pickbtn").forEach((b) => {
+    b.onclick = () => openPicker(Number(b.dataset.row));
   });
 }
 
@@ -259,6 +253,55 @@ function updateSyncInfo() {
   el("syncInfo").textContent = lastSync
     ? `Sincronizado ${lastSync.toLocaleTimeString("pt-BR")} · ${eventsByDate.size} dias`
     : "";
+}
+
+/* ---------- modal de seleção de substituto ---------- */
+
+function openPicker(row) {
+  const ev = findEventByRow(row);
+  if (!ev) return;
+  const current = (ev.rep || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const others = current.filter((c) => !PEOPLE.includes(c));
+  const sel = new Set(current);
+
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  let opts = PEOPLE.map((p) =>
+    `<label class="pick"><input type="checkbox" value="${escapeHtml(p)}" ${sel.has(p) ? "checked" : ""}/> ${escapeHtml(p)}</label>`
+  ).join("");
+  if (others.length) {
+    opts += others.map((o) =>
+      `<label class="pick"><input type="checkbox" value="${escapeHtml(o)}" checked/> ${escapeHtml(o)}</label>`
+    ).join("");
+  }
+  overlay.innerHTML = `
+    <div class="modal">
+      <h3>Quem vai no lugar?</h3>
+      <div class="picklist">${opts || '<div class="empty small">Nenhuma pessoa cadastrada</div>'}</div>
+      <label class="pick"><input type="checkbox" id="pickOutro"/> Outro…</label>
+      <input class="subinput" id="pickOutroTxt" placeholder="Digite o nome" style="display:none;margin-top:8px;width:100%" />
+      <div class="modal-actions">
+        <button id="pickCancel">Cancelar</button>
+        <button class="primary" id="pickOk">Salvar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const outro = overlay.querySelector("#pickOutro");
+  const outroTxt = overlay.querySelector("#pickOutroTxt");
+  outro.onchange = () => { outroTxt.style.display = outro.checked ? "block" : "none"; };
+
+  overlay.querySelector("#pickCancel").onclick = () => overlay.remove();
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  overlay.querySelector("#pickOk").onclick = async () => {
+    const chosen = [...overlay.querySelectorAll('input[type=checkbox]:not(#pickOutro):checked')]
+      .map((c) => c.value.trim()).filter(Boolean);
+    if (outro.checked && outroTxt.value.trim()) chosen.push(outroTxt.value.trim());
+    ev.rep = chosen.join(", ");
+    ev.presence = "Não";
+    overlay.remove();
+    await saveEvent(ev);
+  };
 }
 
 /* ---------- Google auth + Sheets ---------- */
@@ -446,11 +489,9 @@ function initTheme() {
   el("themeBtn").onclick = () => applyTheme(!document.body.classList.contains("light"));
 }
 
-/* ---------- bootstrap ---------- */
+/* ---------- bootstrap (iOS-safe) ---------- */
 
-console.log("[agenda] boot iniciando…");
-
-async function boot() {
+function boot() {
   initTheme();
   el("loginBtn").onclick = signIn;
   el("loginBtn2").onclick = signIn;
@@ -474,13 +515,16 @@ async function boot() {
   window.addEventListener("offline", () => el("offlinePill").classList.add("show"));
 
   show("login");
-  try {
-    await initAuth();
-    console.log("[agenda] pronto para login");
-  } catch (e) {
-    console.error("[agenda] erro initAuth:", e);
-    toast("Erro ao iniciar: " + e.message);
-  }
+  initAuth()
+    .then(() => console.log("[agenda] pronto para login"))
+    .catch((e) => {
+      console.error("[agenda] erro initAuth:", e);
+      toast("Erro ao iniciar: " + e.message);
+    });
 }
 
-boot().catch((e) => console.error("[agenda] erro fatal boot:", e));
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", boot);
+} else {
+  boot();
+}

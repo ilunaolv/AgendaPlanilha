@@ -6,4 +6,6 @@ window.AGENDACONFIG = {
   SHEET_NAME: "Prefeito (Em testes)",
   SCOPES: "https://www.googleapis.com/auth/spreadsheets",
   REFRESH_MIN: 15,
+  // Nomes disponíveis para selecionar como substituto (um ou mais).
+  PEOPLE: ["Ana Souza", "Rodrigão", "Izumi"],
 };

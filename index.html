@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0f766e" />
+  <meta name="theme-color" content="#028DCF" />
   <title>Agenda do Prefeito</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
@@ -14,8 +14,8 @@
       --panel: #141b22;
       --panel-2: #1b242d;
       --card: #1f2a34;
-      --accent: #0f766e;
-      --accent-2: #14b8a6;
+      --accent: #028DCF;
+      --accent-2: #22a7e6;
       --text: #e7eef3;
       --muted: #8aa0ad;
       --line: #243240;
@@ -29,8 +29,8 @@
       --panel: #ffffff;
       --panel-2: #e9eef3;
       --card: #ffffff;
-      --accent: #0f766e;
-      --accent-2: #0d9488;
+      --accent: #028DCF;
+      --accent-2: #028DCF;
       --text: #0f172a;
       --muted: #5b6b78;
       --line: #d4dce4;
@@ -51,7 +51,7 @@
     }
     header {
       position: sticky; top: 0; z-index: 10;
-      background: linear-gradient(180deg, #0f766e, #0b5550);
+      background: linear-gradient(180deg, #028DCF, #026ea3);
       padding: 14px 16px;
       display: flex; align-items: center; gap: 12px;
       box-shadow: 0 2px 12px rgba(0,0,0,.35);
@@ -60,12 +60,12 @@
     header .spacer { flex: 1; }
     button {
       font: inherit; border: 0; border-radius: 10px; padding: 10px 14px;
-      background: rgba(255,255,255,.14); color: #fff; cursor: pointer;
+      background: rgba(255,255,255,.16); color: #fff; cursor: pointer;
       display: inline-flex; align-items: center; gap: 8px; transition: background .15s;
     }
-    button:hover { background: rgba(255,255,255,.24); }
-    button.primary { background: var(--accent-2); color: #04201d; font-weight: 600; }
-    button.primary:hover { background: #2dd4bf; }
+    button:hover { background: rgba(255,255,255,.26); }
+    button.primary { background: var(--accent-2); color: #fff; font-weight: 600; }
+    button.primary:hover { background: #1a96d4; }
     .container { max-width: 760px; margin: 0 auto; padding: 16px; }
     .modenav { display: flex; gap: 6px; margin-bottom: 12px; }
     .modebtn {
@@ -107,13 +107,11 @@
       padding: 7px 10px; border-radius: 9px; font-size: .82rem; cursor: pointer;
     }
     .card .mini:hover { background: #243240; }
-    .card .subbox { margin-top: 10px; display: flex; gap: 6px; }
-    .card .subinput {
-      flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--line);
-      border-radius: 9px; padding: 9px 11px; font: inherit;
+    .card .pickbtn {
+      margin-top: 10px; width: 100%; justify-content: center;
+      background: var(--accent); color: #fff; border-radius: 9px; padding: 9px;
     }
-    .card .savebtn { background: var(--accent); color: #fff; padding: 9px 14px; border-radius: 9px; }
-    .card .savebtn:hover { background: #0d8378; }
+    .card .pickbtn:hover { background: #1a96d4; }
     .period { margin-bottom: 16px; }
     .period-head {
       display: flex; align-items: center; gap: 10px; padding: 6px 4px 10px;
@@ -149,6 +147,26 @@
     .offline-pill.show { display: inline-block; }
     footer { text-align: center; color: var(--muted); font-size: .75rem; padding: 20px; }
     .sync { font-size: .75rem; color: var(--muted); margin-bottom: 12px; }
+
+    /* Modal de seleção de substituto */
+    .overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 100;
+      display: flex; align-items: center; justify-content: center; padding: 16px;
+    }
+    .modal {
+      background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+      padding: 18px; width: 100%; max-width: 420px; max-height: 80vh; overflow: auto;
+    }
+    .modal h3 { margin: 0 0 12px; font-size: 1.05rem; }
+    .picklist { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+    .pick { display: flex; align-items: center; gap: 10px; font-size: .95rem; padding: 6px 4px; }
+    .pick input { width: 18px; height: 18px; accent-color: var(--accent); }
+    .subinput {
+      width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line);
+      border-radius: 9px; padding: 9px 11px; font: inherit;
+    }
+    .modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+    .modal-actions button { flex: 1; justify-content: center; border: 1px solid var(--line); }
   </style>
 </head>
 <body>
@@ -195,8 +213,8 @@
   <div class="toast" id="toast"></div>
 
   <!-- Credenciais: config.js (ignorado pelo git). Veja config.example.js -->
-  <script src="config.js"></script>
-  <script src="app.js"></script>
+  <script src="config.js" defer></script>
+  <script src="app.js" defer></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
