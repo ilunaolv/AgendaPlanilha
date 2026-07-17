@@ -5,9 +5,6 @@ agenda.xlsx
 __pycache__/
 *.pyc
 
-# Config com credenciais (NÃO versionar)
-config.js
-
 # SO
 .DS_Store
 Thumbs.db
