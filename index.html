@@ -172,8 +172,6 @@
     .searchbar input { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; font: inherit; }
     .today-indicator { background: var(--accent) !important; color: #fff !important; border-color: var(--accent) !important; }
     .offline-msg { text-align: center; color: var(--muted); padding: 20px; font-size: .9rem; }
-    .biometric-wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; }
-    .biometric-icon { width: 56px; height: 56px; border-radius: 50%; background: var(--panel-2); display: flex; align-items: center; justify-content: center; font-size: 1.6rem; border: 1px solid var(--line); }
   </style>
 </head>
 <body>
@@ -233,18 +231,6 @@
   <div class="loading-overlay" id="loadingOverlay">
     <div class="spinner"></div>
     <div class="loading-msg">Carregando…</div>
-  </div>
-
-  <div class="overlay" id="biometricOverlay" style="display:none">
-    <div class="modal">
-      <div class="biometric-wrap">
-        <div class="biometric-icon">🔐</div>
-        <h3>Desbloquear com biometria</h3>
-        <p class="small" style="color:var(--muted);text-align:center">Use sua digital ou facial para acessar a agenda.</p>
-        <button id="biometricOk" class="primary" style="width:100%">Autenticar</button>
-        <button id="biometricSkip" style="background:none;border:none;color:var(--muted);text-decoration:underline;padding:8px">Usar login Google</button>
-      </div>
-    </div>
   </div>
 
   <script src="config.js" defer></script>
