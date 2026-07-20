@@ -17,6 +17,7 @@ let selectedDate = startOfDay(new Date());
 let viewMode = "dia";
 let lastSync = null;
 let refreshTimer = null;
+let notifPermission = "default";
 
 /* ---------- persistência de token ---------- */
 
@@ -162,8 +163,8 @@ function show(view) {
   el("loader").style.display = view === "loader" ? "block" : "none";
   el("loginBtn").style.display = accessToken ? "none" : "inline-flex";
   el("logoutBtn").style.display = accessToken ? "inline-flex" : "none";
-  const debugBtn = el("debugBtn");
-  if (debugBtn) debugBtn.style.display = accessToken ? "inline-flex" : "none";
+  const nb = el("notifBtn");
+  if (nb) nb.style.display = accessToken ? "inline-flex" : "none";
 }
 
 function eventCard(e) {
@@ -180,10 +181,8 @@ function eventCard(e) {
   const sub = isNo && e.rep ? `<span class="tag rep">➡️ No lugar: ${escapeHtml(e.rep)}</span>` : "";
   const repTag = !isNo && e.rep ? `<span class="tag rep">👤 ${escapeHtml(e.rep)}</span>` : "";
   const act = (val) => `mini${p === val ? " active-" + val.toLowerCase() : ""}`;
-  const subField = isNo
-    ? `<button class="pickbtn" data-row="${e.rowIndex}">Selecionar quem vai no lugar</button>`
-    : "";
-  const locBtn = `<button class="locbtn" data-row="${e.rowIndex}">📍 ${e.local ? "Alterar local" : "Informar local"}</button>`;
+  const subField = `<button class="pickbtn" data-row="${e.rowIndex}">Selecionar quem vai no lugar</button>`;
+  const locBtn = `<button class="locbtn" data-row="${e.rowIndex}">📍 ${e.local ? "Abrir no Maps" : "Informar local"}</button>`;
   return `
   <div class="card">
     <div class="time">🕑 ${escapeHtml(e.time || "—")} ${badge}</div>
@@ -335,7 +334,6 @@ function openPicker(row) {
       .map((c) => c.value.trim()).filter(Boolean);
     if (outro.checked && outroTxt.value.trim()) chosen.push(outroTxt.value.trim());
     ev.rep = chosen.join(", ");
-    ev.presence = "Não";
     overlay.remove();
     await saveEvent(ev);
   };
@@ -346,10 +344,12 @@ function openLoc(row) {
   if (!ev) return;
   const overlay = document.createElement("div");
   overlay.className = "overlay";
+  const mapsUrl = ev.local ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ev.local)}` : "";
   overlay.innerHTML = `
     <div class="modal">
       <h3>Local do evento</h3>
       <input class="subinput" id="locTxt" placeholder="Ex: Paço Municipal" value="${escapeHtml(ev.local || "")}" style="width:100%" />
+      ${mapsUrl ? `<a class="loclink" href="${mapsUrl}" target="_blank" rel="noopener">🗺 Abrir no Google Maps</a>` : ""}
       <div class="modal-actions">
         <button id="locCancel">Cancelar</button>
         <button class="primary" id="locOk">Salvar</button>
@@ -363,6 +363,57 @@ function openLoc(row) {
     overlay.remove();
     await saveEvent(ev);
   };
+}
+
+/* ---------- notificações ---------- */
+
+async function requestNotifPermission() {
+  if (!("Notification" in window)) { toast("Notificações não suportadas."); return; }
+  let perm = Notification.permission;
+  if (perm === "default") {
+    perm = await Notification.requestPermission();
+  }
+  notifPermission = perm;
+  updateNotifBtn();
+  if (perm === "granted") {
+    toast("Notificações ativadas ✓");
+    scheduleNotifCheck();
+  } else {
+    toast("Notificações bloqueadas.");
+  }
+}
+function updateNotifBtn() {
+  const btn = el("notifBtn");
+  if (!btn) return;
+  if (notifPermission === "granted") btn.textContent = "🔔";
+  else if (notifPermission === "denied") btn.textContent = "🔕";
+  else btn.textContent = "🔔";
+}
+function scheduleNotifCheck() {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const now = new Date();
+  const upcoming = [];
+  for (const [key, evs] of eventsByDate) {
+    for (const ev of evs) {
+      if (ev.presence !== "Sim") continue;
+      const timeStr = (ev.time || "").replace(/[^0-9]/g, "");
+      if (!timeStr) continue;
+      const hh = parseInt(timeStr.slice(0, 2), 10) || 0;
+      const mm = parseInt(timeStr.slice(2, 4), 10) || 0;
+      const evDate = parseKey(key);
+      evDate.setHours(hh, mm, 0, 0);
+      const diff = evDate - now;
+      if (diff > 0 && diff < 60 * 60 * 1000) {
+        upcoming.push(ev);
+      }
+    }
+  }
+  if (upcoming.length) {
+    new Notification("Agenda do Prefeito", {
+      body: `${upcoming.length} evento(s) nas próximas 1h`,
+      icon: "icon.svg",
+    });
+  }
 }
 
 /* ---------- Google auth + Sheets ---------- */
@@ -446,6 +497,7 @@ async function afterLogin() {
     show("app");
     render();
     scheduleRefresh();
+    updateNotifBtn();
     toast(`Sincronizado: ${eventsByDate.size} dias`);
     console.log("[agenda] carregado, eventos:", eventsByDate.size, "dias");
   } catch (e) {
@@ -641,41 +693,7 @@ async function boot() {
   el("loginBtn").onclick = signIn;
   el("loginBtn2").onclick = signIn;
   el("logoutBtn").onclick = signOut;
-  el("refreshBtn").onclick = async () => {
-    showLoading(true, "Atualizando…");
-    try { await loadEvents(); render(); toast("Atualizado"); }
-    catch (e) { toast("Erro ao atualizar"); }
-    finally { showLoading(false); }
-  };
-  el("prevDay").onclick = navPrev;
-  el("nextDay").onclick = navNext;
-  el("todayBtn").onclick = () => { selectedDate = startOfDay(new Date()); render(); };
-  document.querySelectorAll(".modebtn").forEach((b) => {
-    b.onclick = () => setMode(b.dataset.mode);
-  });
-  window.addEventListener("online", () => {
-    el("offlinePill").classList.remove("show");
-    if (accessToken) loadEvents().then(render).catch(() => {});
-  });
-  window.addEventListener("offline", () => el("offlinePill").classList.add("show"));
-
-  if (loadToken()) {
-    show("loader");
-    try {
-      await ensureGapi();
-      gapi.client.setToken({ access_token: accessToken });
-      await afterLogin();
-    } catch (e) {
-      console.error("[agenda] falha ao reusar token:", e);
-      clearToken();
-      show("login");
-    }
-  } else {
-    show("login");
-    initAuth()
-      .then(() => console.log("[agenda] pronto para login"))
-      .catch((e) => { console.error("[agenda] erro initAuth:", e); toast("Erro ao iniciar: " + e.message); });
-  }
+  el("notifBtn").onclick = requestNotifPermission;
   el("refreshBtn").onclick = async () => {
     showLoading(true, "Atualizando…");
     try { await loadEvents(); render(); toast("Atualizado"); }
