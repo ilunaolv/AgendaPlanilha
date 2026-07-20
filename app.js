@@ -322,7 +322,7 @@ function updateTodayBtn() {
     ? `Sincronizado ${lastSync.toLocaleTimeString("pt-BR")} · ${eventsByDate.size} dias`
     : "";
   updatePendingBtn();
-}
+
 function updatePendingBtn() {
   const btn = el("updatePendingBtn");
   if (!btn) return;
