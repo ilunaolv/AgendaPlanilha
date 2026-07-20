@@ -16,17 +16,20 @@ Este documento serve para você recriar todo o projeto do zero, exatamente como 
 2. **Sincronização com Google Sheets** — lê automaticamente os dados da planilha
 3. **Visualização por dia, semana e mês** — navegação entre períodos
 4. **Confirmação de presença** — botões "Vou", "Não vou" e "Reservar"
-5. **Selecionar quem vai no lugar** — lista de nomes para quem substitui
+5. **Selecionar quem vai no lugar** — lista de nomes para quem substitui (visível para todos os status)
 6. **Integração com Google Maps** — abre o local no Maps automaticamente
-7. **Notificações por evento** — sino em cada card com aviso 1h antes
-8. **Filtro por status** — ver apenas confirmados, não vou ou reservar
-9. **Busca por evento** — campo de pesquisa por texto
-10. **Indicador de hoje** — destaca o dia atual
-11. **Botão de atualização pendente** — avisa quando tem versão nova
-12. **Notificação de teste** — botão para testar se as notificações funcionam
+7. **Notificações por evento** — sino em cada card com aviso 1h antes (padrão Google)
+8. **Notificação de teste** — botão no header para testar notificações
+9. **Filtro por status** — ver apenas confirmados, não vou ou reservar
+10. **Busca por evento** — campo de pesquisa por texto
+11. **Indicador de hoje** — destaca o dia atual no botão "Hoje"
+12. **Botão de atualização pendente** — avisa quando tem versão nova
 13. **Bloqueio por permissão** — se não tiver acesso à planilha, não entra
 14. **Tema claro/escuro** — alternância de tema
 15. **Modo offline** — funciona mesmo sem internet (cache)
+16. **Ordenação por horário** — eventos listados em ordem cronológica
+17. **Cores de nota** — 1-6 cinza, 7-8 laranja, 9-10 azul
+18. **Validação de notificação** — impede notificação de evento já ocorrido
 
 ---
 
@@ -173,12 +176,15 @@ Crie um PWA chamado "Agenda do Prefeito" com as seguintes especificações:
    - Botão de sino por evento para ativar notificação (1h antes)
    - Botão de local com link para Google Maps
 
-5. NOTIFICAÇÕES:
-   - Notificação por evento (sino no card)
-   - Aviso 1h antes do evento
-   - Apenas para eventos com presença "Sim"
-   - Botão de teste de notificação no header
-   - Persistência da preferência em localStorage
+ 5. NOTIFICAÇÕES:
+    - Notificação por evento (sino no card)
+    - Aviso 1h antes do evento
+    - Apenas para eventos com presença "Sim"
+    - Botão de teste de notificação no header
+    - Padrão Google: usa Notification API nativa do navegador
+    - No mobile: aparece como notificação nativa do sistema (Android/iOS)
+    - Persistência da preferência em localStorage
+    - Bloqueia notificação se evento já estiver ocorrendo
 
 6. GOOGLE MAPS:
    - Modal para informar local do evento
@@ -232,6 +238,14 @@ O app busca os dados da planilha de 5 em 5 minutos (configurável). Quando você
 
 ### O que é o Service Worker?
 É um arquivo que roda em segundo plano no navegador. Ele guarda os dados do app no celular para funcionar mesmo sem internet.
+
+### Como funcionam as notificações?
+O app usa a **Notification API nativa do navegador** (padrão Google):
+- Quando você ativa o sino em um evento, o app salva sua preferência
+- Quando faltar 1h para o evento, o navegador exibe uma notificação nativa do sistema
+- No Android: aparece na barra de notificações como qualquer app
+- No iPhone: aparece como notificação do sistema (iOS 16.4+)
+- A notificação mostra: horário e título do evento
 
 ### Por que 3 branches?
 - **main**: sempre tem a versão que está funcionando, pronta para usar
@@ -312,9 +326,16 @@ git branch -d nome-da-branch
 - Verifique se o nome da aba está correto
 
 ### Notificações não funcionam no iPhone
-- O iOS exige interação do usuário primeiro
+- O iOS exige interação do usuário primeiro (toque no sino)
 - Toque no sino e autorize
 - Feche e reabra o app
+- No iOS 16.4+, notificações funcionam se o app estiver instalado na tela inicial
+- No Android, funciona normalmente em segundo plano
+
+### Notificações não aparecem na tela do celular
+- Verifique se o app tem permissão de notificação (Configurações > Apps > Navegador > Notificações)
+- No Android, certifique-se que o app está adicionado à tela inicial (instalado como PWA)
+- Notificações só aparecem se o evento estiver a menos de 1h e você confirmou "Vou"
 
 ### App não atualiza
 - Limpe o cache do Safari (Configurações > Safari > Avançado > Dados)
