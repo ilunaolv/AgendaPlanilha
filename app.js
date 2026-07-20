@@ -609,6 +609,40 @@ function initTheme() {
   el("themeBtn").onclick = () => applyTheme(!document.body.classList.contains("light"));
 }
 
+/* ---------- debug / teste de conexão (sem precisar de Mac) ---------- */
+
+async function debugConnection() {
+  showLoading(true, "Testando conexão…");
+  try {
+    await ensureGapi();
+    if (!accessToken) { toast("Faça login primeiro."); showLoading(false); return; }
+    gapi.client.setToken({ access_token: accessToken });
+    await loadEvents();
+    const datas = [...eventsByDate.keys()].sort();
+    const overlay = document.createElement("div");
+    overlay.className = "overlay";
+    const datas = [...eventsByDate.keys()].sort();
+    overlay.innerHTML = `
+      <div class="modal">
+        <h3>Teste de conexão</h3>
+        <div class="picklist">
+          <div>✅ Sheet API OK</div>
+          <div>📅 Datas com eventos: <b>${datas.length}</b></div>
+          <div>🗓 Dias carregados: <b>${eventsByDate.size}</b></div>
+          <div>🔎 Primeiras datas: ${datas.slice(0,5).join(', ') || 'nenhuma'}</div>
+        </div>
+        <div class="modal-actions"><button id="debugClose">Fechar</button></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector("#debugClose").onclick = () => overlay.remove();
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  } catch (e) {
+    toast("Erro no teste: " + e.message);
+  } finally {
+    showLoading(false);
+  }
+}
+
 /* ---------- bootstrap (iOS-safe) ---------- */
 
 async function boot() {
@@ -616,6 +650,7 @@ async function boot() {
   el("loginBtn").onclick = signIn;
   el("loginBtn2").onclick = signIn;
   el("logoutBtn").onclick = signOut;
+  el("debugBtn").onclick = debugConnection;
   el("refreshBtn").onclick = async () => {
     showLoading(true, "Atualizando…");
     try { await loadEvents(); render(); toast("Atualizado"); }
