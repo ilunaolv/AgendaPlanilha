@@ -162,6 +162,8 @@ function show(view) {
   el("loader").style.display = view === "loader" ? "block" : "none";
   el("loginBtn").style.display = accessToken ? "none" : "inline-flex";
   el("logoutBtn").style.display = accessToken ? "inline-flex" : "none";
+  const debugBtn = el("debugBtn");
+  if (debugBtn) debugBtn.style.display = accessToken ? "inline-flex" : "none";
 }
 
 function eventCard(e) {
@@ -377,10 +379,20 @@ function loadScript(src) {
 }
 
 async function loadGapi() {
-  await loadScript(GAPI_LOADER);
-  await new Promise((resolve) => gapi.load("client", () => resolve()));
-  await gapi.client.init({});
-  await gapi.client.load("https://sheets.googleapis.com/$discovery/rest?version=v4");
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await loadScript(GAPI_LOADER);
+      await new Promise((resolve) => gapi.load("client", () => resolve()));
+      await gapi.client.init({});
+      await gapi.client.load("https://sheets.googleapis.com/$discovery/rest?version=v4");
+      console.log("[agenda] gapi carregado (tentativa", attempt, ")");
+      return;
+    } catch (e) {
+      console.error("[agenda] loadGapi tentativa", attempt, "erro:", e);
+      if (attempt < 3) await new Promise((r) => setTimeout(r, 400 * attempt));
+    }
+  }
+  throw new Error("Falha ao carregar Google API após 3 tentativas. Verifique sua conexão.");
 }
 async function ensureGapi() {
   if (typeof gapi === "undefined" || !gapi.client) await loadGapi();
@@ -438,7 +450,8 @@ async function afterLogin() {
     console.log("[agenda] carregado, eventos:", eventsByDate.size, "dias");
   } catch (e) {
     console.error("[agenda] afterLogin erro:", e);
-    toast("Não foi possível carregar: " + e.message);
+    const msg = (e && (e.message || e.error_description || JSON.stringify(e))) || "erro desconhecido";
+    toast("Não foi possível carregar: " + msg);
     selectedDate = startOfDay(new Date());
     show("app");
     render();
