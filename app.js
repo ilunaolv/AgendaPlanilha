@@ -23,6 +23,8 @@ let hasUpdatePending = false;
 const LAST_VERSION_KEY = "agenda_last_version";
 let currentFilter = "todos";
 let searchQuery = "";
+let isRefreshingToken = false;
+let tokenRefreshPromise = null;
 
 /* ---------- persistência de token ---------- */
 
@@ -36,7 +38,7 @@ function loadToken() {
     const raw = localStorage.getItem("agenda_token");
     if (!raw) return false;
     const { tok, exp } = JSON.parse(raw);
-    if (!tok || Date.now() > exp - 5000) return false;
+    if (!tok) return false;
     accessToken = tok;
     tokenExpiry = exp;
     return true;
@@ -46,6 +48,55 @@ function clearToken() {
   accessToken = null;
   tokenExpiry = 0;
   try { localStorage.removeItem("agenda_token"); } catch (_) {}
+}
+async function refreshAccessToken() {
+  if (!tokenClient || isRefreshingToken) return false;
+  try {
+    isRefreshingToken = true;
+    tokenRefreshPromise = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error("Timeout na renovacao do token"));
+      }, 10000);
+      const originalCallback = tokenClient.callback;
+      tokenClient.callback = (resp) => {
+        clearTimeout(timeout);
+        tokenClient.callback = originalCallback;
+        if (resp.error) {
+          reject(new Error(resp.error_description || resp.error));
+        } else {
+          saveToken(resp.access_token, resp.expires_in);
+          gapi.client.setToken({ access_token: accessToken });
+          resolve();
+        }
+      };
+      tokenClient.requestAccessToken({ prompt: "" });
+    });
+    await tokenRefreshPromise;
+    return true;
+  } catch (e) {
+    console.error("[agenda] erro ao renovar token:", e);
+    return false;
+  } finally {
+    isRefreshingToken = false;
+    tokenRefreshPromise = null;
+  }
+}
+async function ensureValidToken() {
+  if (!accessToken) return false;
+  const now = Date.now();
+  const expiresIn = tokenExpiry - now;
+  if (expiresIn > 5 * 60 * 1000) return true;
+  if (expiresIn <= 0) {
+    const ok = await refreshAccessToken();
+    if (!ok) {
+      clearToken();
+      show("login");
+      toast("Sessao expirada. Faca login novamente.");
+      return false;
+    }
+    return true;
+  }
+  return true;
 }
 
 /* ---------- utilidades de data ---------- */
@@ -639,6 +690,7 @@ function signOut() {
 }
 
 async function loadEvents() {
+  if (!(await ensureValidToken())) return;
   const range = `'${CONFIG.SHEET_NAME}'!A:G`;
   let lastErr = null;
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -699,6 +751,7 @@ async function loadEvents() {
 }
 
 async function saveEvent(ev) {
+  if (!(await ensureValidToken())) return;
   if (!ev.rowIndex) { toast("Evento sem linha associada."); return; }
   const sheet = CONFIG.SHEET_NAME;
   showLoading(true, "Salvando…");
@@ -841,6 +894,8 @@ async function boot() {
   window.addEventListener("offline", () => el("offlinePill").classList.add("show"));
 
   if (loadToken()) {
+    const valid = await ensureValidToken();
+    if (!valid) return;
     show("loader");
     try {
       await ensureGapi();
