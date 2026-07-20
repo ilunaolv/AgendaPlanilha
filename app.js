@@ -206,9 +206,13 @@ function render() {
     title.textContent = fmtBig(selectedDate);
     sub.textContent = fmtSmall(selectedDate);
     const evs = sortEvents(eventsByDate.get(isoKey(selectedDate)) || []);
-    list.innerHTML = evs.length
-      ? evs.map(eventCard).join("")
-      : `<div class="empty">Nenhum compromisso para este dia.</div>`;
+    if (evs.length) {
+      list.innerHTML = evs.map(eventCard).join("");
+    } else {
+      const datas = [...eventsByDate.keys()].sort();
+      const hint = datas.length ? `Há eventos em ${datas.length} dia(s). Use ‹ › para navegar.` : "Nenhum compromisso para este dia.";
+      list.innerHTML = `<div class="empty">${hint}</div>`;
+    }
   } else if (viewMode === "semana") {
     const start = startOfWeek(selectedDate);
     const end = addDays(start, 6);
@@ -430,6 +434,7 @@ async function afterLogin() {
     show("app");
     render();
     scheduleRefresh();
+    toast(`Sincronizado: ${eventsByDate.size} dias`);
     console.log("[agenda] carregado, eventos:", eventsByDate.size, "dias");
   } catch (e) {
     console.error("[agenda] afterLogin erro:", e);
@@ -474,38 +479,58 @@ function signOut() {
 
 async function loadEvents() {
   const range = `'${CONFIG.SHEET_NAME}'!A:G`;
-  const r = await gapi.client.sheets.spreadsheets.values.get({
-    spreadsheetId: CONFIG.SPREADSHEET_ID,
-    range,
-  });
-  const rows = r.result.values || [];
-  console.log("[agenda] linhas lidas:", rows.length);
-  if (!rows.length) console.warn("[agenda] planilha retornou vazio — verifique nome da aba/range");
-  eventsByDate = new Map();
-  let loaded = 0;
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    const date = excelSerialToDate(row[0]);
-    if (!date) continue;
-    const ev = {
-      rowIndex: i + 1,
-      time: (row[1] || "").trim(),
-      event: (row[2] || "").trim(),
-      note: (row[3] || "").trim(),
-      presence: (row[4] || "").trim(),
-      rep: (row[5] || "").trim(),
-      local: (row[6] || "").trim(),
-    };
-    if (!ev.event && !ev.time) continue;
-    loaded++;
-    const key = isoKey(date);
-    if (!eventsByDate.has(key)) eventsByDate.set(key, []);
-    eventsByDate.get(key).push(ev);
+  let lastErr = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const r = await gapi.client.sheets.spreadsheets.values.get({
+        spreadsheetId: CONFIG.SPREADSHEET_ID,
+        range,
+      });
+      const rows = r.result.values || [];
+      console.log(`[agenda] tentativa ${attempt}: linhas lidas:`, rows.length);
+      if (!rows.length) console.warn("[agenda] planilha retornou vazio — verifique nome da aba/range");
+      eventsByDate = new Map();
+      let loaded = 0;
+      let skippedDate = 0;
+      let skippedEmpty = 0;
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const rawDate = row[0];
+        const date = excelSerialToDate(rawDate);
+        if (!date) {
+          skippedDate++;
+          if (attempt === 1 && i <= 5) {
+            console.warn(`[agenda] linha ${i+1}: data inválida/parse falhou:`, rawDate);
+          }
+          continue;
+        }
+        const ev = {
+          rowIndex: i + 1,
+          time: (row[1] || "").trim(),
+          event: (row[2] || "").trim(),
+          note: (row[3] || "").trim(),
+          presence: (row[4] || "").trim(),
+          rep: (row[5] || "").trim(),
+          local: (row[6] || "").trim(),
+        };
+        if (!ev.event && !ev.time) { skippedEmpty++; continue; }
+        loaded++;
+        const key = isoKey(date);
+        if (!eventsByDate.has(key)) eventsByDate.set(key, []);
+        eventsByDate.get(key).push(ev);
+      }
+      console.log(`[agenda] tentativa ${attempt}: eventos carregados:`, loaded, "| datas:", eventsByDate.size, "| pulados sem data:", skippedDate, "| pulados vazios:", skippedEmpty);
+      if (!loaded) console.warn("[agenda] nenhum evento válido — verifique colunas/data/horário/evento");
+      lastSync = new Date();
+      updateSyncInfo();
+      return;
+    } catch (e) {
+      lastErr = e;
+      console.error(`[agenda] loadEvents tentativa ${attempt} erro:`, e);
+      if (attempt === 1) await new Promise((r) => setTimeout(r, 600));
+    }
   }
-  console.log("[agenda] eventos carregados:", loaded, "| datas:", eventsByDate.size);
-  if (!loaded) console.warn("[agenda] nenhum evento válido — verifique colunas/data/horário/evento");
-  lastSync = new Date();
-  updateSyncInfo();
+  throw lastErr || new Error("Falha ao carregar eventos após 2 tentativas");
 }
 
 async function saveEvent(ev) {
