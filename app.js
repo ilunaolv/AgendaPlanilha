@@ -238,7 +238,8 @@ function eventCard(e) {
   const locBtn = `<button class="locbtn" data-row="${e.rowIndex}">📍 ${e.local ? "Abrir no Maps" : "Informar local"}</button>`;
   const notifKey = `agenda_notif_${e.rowIndex}`;
   const notifOn = localStorage.getItem(notifKey) === "1";
-  const notifBtn = `<button class="notifbtn ${notifOn ? "on" : ""}" data-row="${e.rowIndex}" title="Notificacao">🔔</button>`;
+  const notifIcon = notifOn ? "🔔" : "🔕";
+  const notifBtn = `<button class="notif-icon ${notifOn ? "on" : ""}" data-row="${e.rowIndex}" title="Notificacao">${notifIcon}</button>`;
   return `
   <div class="card">
     <div class="time">🕑 ${escapeHtml(e.time || "—")} ${badge} ${notifBtn}</div>
@@ -338,6 +339,26 @@ function wireCards(list) {
       if (!ev) return;
       ev.presence = b.dataset.act === "sim" ? "Sim" : b.dataset.act === "nao" ? "Não" : "Reservar";
       if (ev.presence !== "Não") ev.rep = "";
+      if (ev.presence === "Sim") {
+        const notifKey = `agenda_notif_${ev.rowIndex}`;
+        localStorage.setItem(notifKey, "1");
+      }
+      if ((ev.presence === "Não" || ev.presence === "Reservar") && ev.rep) {
+        const reps = ev.rep.split(",").map((s) => s.trim()).filter(Boolean);
+        if (reps.length) {
+          const now = new Date();
+          const evDate = parseKey(isoKey(selectedDate));
+          const timeStr = (ev.time || "").replace(/[^0-9]/g, "");
+          if (timeStr) {
+            const hh = parseInt(timeStr.slice(0, 2), 10) || 0;
+            const mm = parseInt(timeStr.slice(2, 4), 10) || 0;
+            evDate.setHours(hh, mm, 0, 0);
+            const diff = evDate - now;
+            const mins = Math.max(1, Math.floor(diff / 60000));
+            showNotifModal(ev, reps, mins);
+          }
+        }
+      }
       await saveEvent(ev);
     };
   });
@@ -394,6 +415,19 @@ function checkPendingUpdate() {
 
 /* ---------- notificacoes por evento ---------- */
 
+function autoEnableNotifForHighNotes() {
+  for (const [key, evs] of eventsByDate) {
+    for (const ev of evs) {
+      const noteVal = noteNum(ev.note);
+      if (noteVal >= 9) {
+        const notifKey = `agenda_notif_${ev.rowIndex}`;
+        if (localStorage.getItem(notifKey) !== "1") {
+          localStorage.setItem(notifKey, "1");
+        }
+      }
+    }
+  }
+}
 function toggleNotif(row) {
   const {key, ev} = findEventByRow(row);
   if (!ev) return;
@@ -446,7 +480,6 @@ async function checkNotifNow() {
   for (const [key, evs] of eventsByDate) {
     for (const ev of evs) {
       if (localStorage.getItem(`agenda_notif_${ev.rowIndex}`) !== "1") continue;
-      if (ev.presence !== "Sim") continue;
       const timeStr = (ev.time || "").replace(/[^0-9]/g, "");
       if (!timeStr) continue;
       const hh = parseInt(timeStr.slice(0, 2), 10) || 0;
@@ -456,6 +489,12 @@ async function checkNotifNow() {
       const diff = evDate - now;
       if (diff > 0 && diff < NOTIF_ADVANCE_MS) {
         const mins = Math.floor(diff / 60000);
+        if (ev.presence === "Não" || ev.presence === "Reservar") {
+          const reps = (ev.rep || "").split(",").map((s) => s.trim()).filter(Boolean);
+          if (reps.length) {
+            showNotifModal(ev, reps, mins);
+          }
+        }
         const body = mins > 0
           ? `Inicia em ${mins} minuto(s) — ${ev.event || "Evento"}`
           : `🕑 ${ev.time || ""} — ${ev.event || "Evento"}`;
@@ -466,6 +505,22 @@ async function checkNotifNow() {
       }
     }
   }
+}
+function showNotifModal(ev, reps, mins) {
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  const repList = reps.map((r) => `<li>${escapeHtml(r)}</li>`).join("");
+  overlay.innerHTML = `
+    <div class="modal notif-modal">
+      <h3>Notificação de evento</h3>
+      <p><b>${escapeHtml(ev.event || "Evento")}</b> será realizado daqui ${mins} minuto(s).</p>
+      <p>Os representantes/acompanhantes abaixo irão comparecer:</p>
+      <ul class="rep-list">${repList}</ul>
+      <button class="primary close-btn" id="notifModalClose">Fechar</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector("#notifModalClose").onclick = () => overlay.remove();
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
 }
 
 /* ---------- modais ---------- */
@@ -633,6 +688,7 @@ async function afterLogin() {
   try {
     await ensureGapi();
     await loadEvents();
+    autoEnableNotifForHighNotes();
     selectedDate = startOfDay(new Date());
     show("app");
     render();
@@ -784,11 +840,11 @@ async function saveEvent(ev) {
 function scheduleRefresh() {
   clearInterval(refreshTimer);
   refreshTimer = setInterval(async () => {
-    try { await loadEvents(); render(); checkNotifNow(); } catch (_) {}
+    try { await loadEvents(); autoEnableNotifForHighNotes(); render(); checkNotifNow(); } catch (_) {}
   }, CONFIG.REFRESH_MIN * 60000);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && accessToken) {
-      loadEvents().then(render).catch(() => {});
+      loadEvents().then((r) => { autoEnableNotifForHighNotes(); render(); }).catch(() => {});
     }
   });
 }
