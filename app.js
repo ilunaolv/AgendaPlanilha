@@ -21,6 +21,8 @@ let hasUpdatePending = false;
 const LAST_VERSION_KEY = "agenda_last_version";
 let currentFilter = "todos";
 let searchQuery = "";
+let biometricEnabled = false;
+const BIOMETRIC_KEY = "agenda_biometric_credential";
 
 /* ---------- persistência de token ---------- */
 
@@ -414,6 +416,88 @@ async function checkNotifNow() {
   }
 }
 
+/* ---------- biometria ---------- */
+
+async function isBiometricSupported() {
+  if (!window.PublicKeyCredential) return false;
+  try {
+    const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+    return available;
+  } catch (_) {
+    return false;
+  }
+}
+async function createBiometricCredential() {
+  if (!("PublicKeyCredential" in window)) return false;
+  try {
+    const challenge = new Uint8Array(32);
+    crypto.getRandomValues(challenge);
+    const cred = await navigator.credentials.create({
+      publicKey: {
+        challenge,
+        rp: { name: "Agenda do Prefeito", id: window.location.hostname },
+        user: {
+          id: new Uint8Array(16),
+          name: "user@agenda",
+          displayName: "Usuario",
+        },
+        pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+        authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" },
+        timeout: 60000,
+      },
+    });
+    if (cred) {
+      localStorage.setItem(BIOMETRIC_KEY, JSON.stringify({ id: cred.id, enabled: true }));
+      biometricEnabled = true;
+      return true;
+    }
+    return false;
+  } catch (e) {
+    console.error("[agenda] erro ao criar credencial biometrica:", e);
+    return false;
+  }
+}
+async function verifyBiometric() {
+  if (!("PublicKeyCredential" in window)) return false;
+  try {
+    const raw = localStorage.getItem(BIOMETRIC_KEY);
+    if (!raw) return false;
+    const { id } = JSON.parse(raw);
+    const challenge = new Uint8Array(32);
+    crypto.getRandomValues(challenge);
+    const assertion = await navigator.credentials.get({
+      publicKey: {
+        challenge,
+        allowCredentials: [{ type: "public-key", id: new Uint8Array(id.length) }],
+        userVerification: "required",
+        timeout: 60000,
+      },
+    });
+    return !!assertion;
+  } catch (e) {
+    console.error("[agenda] erro na verificacao biometrica:", e);
+    return false;
+  }
+}
+function showBiometricPrompt(onSuccess, onSkip) {
+  const overlay = el("biometricOverlay");
+  if (!overlay) { onSkip(); return; }
+  overlay.style.display = "flex";
+  const ok = el("biometricOk");
+  const skip = el("biometricSkip");
+  const cleanup = () => { overlay.style.display = "none"; };
+  const onOk = async () => {
+    cleanup();
+    const ok = await verifyBiometric();
+    if (ok) onSuccess();
+    else { toast("Biometria nao reconhecida."); onSkip(); }
+  };
+  const onSkipBtn = () => { cleanup(); onSkip(); };
+  ok.onclick = onOk;
+  skip.onclick = onSkipBtn;
+  overlay.onclick = (e) => { if (e.target === overlay) { cleanup(); onSkip(); } };
+}
+
 /* ---------- modais ---------- */
 
 function openPicker(row) {
@@ -572,6 +656,15 @@ async function afterLogin() {
     scheduleRefresh();
     toast(`Sincronizado: ${eventsByDate.size} dias`);
     console.log("[agenda] carregado, eventos:", eventsByDate.size, "dias");
+
+    if (!biometricEnabled && (await isBiometricSupported())) {
+      const enable = confirm("Deseja ativar login por biometria (digital/facial) nas proximas vezes?");
+      if (enable) {
+        const ok = await createBiometricCredential();
+        if (ok) toast("Biometria ativada com sucesso!");
+        else toast("Nao foi possivel ativar biometria.");
+      }
+    }
   } catch (e) {
     console.error("[agenda] afterLogin erro:", e);
     const msg = (e && (e.message || e.error_description || JSON.stringify(e))) || "erro desconhecido";
@@ -825,15 +918,47 @@ async function boot() {
   window.addEventListener("offline", () => el("offlinePill").classList.add("show"));
 
   if (loadToken()) {
-    show("loader");
-    try {
-      await ensureGapi();
-      gapi.client.setToken({ access_token: accessToken });
-      await afterLogin();
-    } catch (e) {
-      console.error("[agenda] falha ao reusar token:", e);
-      clearToken();
+    const bioRaw = localStorage.getItem(BIOMETRIC_KEY);
+    if (bioRaw) {
+      try { const bio = JSON.parse(bioRaw); biometricEnabled = bio.enabled; } catch (_) {}
+    }
+    if (biometricEnabled && (await isBiometricSupported())) {
+      show("loader");
+      showBiometricPrompt(
+        async () => {
+          try {
+            await ensureGapi();
+            gapi.client.setToken({ access_token: accessToken });
+            await afterLogin();
+          } catch (e) {
+            console.error("[agenda] erro apos biometria:", e);
+            clearToken();
+            show("login");
+          }
+        },
+        () => {
+          clearToken();
+          biometricEnabled = false;
+          localStorage.removeItem(BIOMETRIC_KEY);
+          show("login");
+        }
+      );
+    } else if (loadToken()) {
+      show("loader");
+      try {
+        await ensureGapi();
+        gapi.client.setToken({ access_token: accessToken });
+        await afterLogin();
+      } catch (e) {
+        console.error("[agenda] falha ao reusar token:", e);
+        clearToken();
+        show("login");
+      }
+    } else {
       show("login");
+      initAuth()
+        .then(() => console.log("[agenda] pronto para login"))
+        .catch((e) => { console.error("[agenda] erro initAuth:", e); toast("Erro ao iniciar: " + e.message); });
     }
   } else {
     show("login");
