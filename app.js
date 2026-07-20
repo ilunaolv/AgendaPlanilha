@@ -19,6 +19,8 @@ let lastSync = null;
 let refreshTimer = null;
 let hasUpdatePending = false;
 const LAST_VERSION_KEY = "agenda_last_version";
+let currentFilter = "todos";
+let searchQuery = "";
 
 /* ---------- persistência de token ---------- */
 
@@ -199,6 +201,22 @@ function eventCard(e) {
   </div>`;
 }
 
+function getFilteredEvents(evs) {
+  let filtered = evs;
+  if (currentFilter !== "todos") {
+    filtered = filtered.filter((ev) => normPresence(ev.presence) === currentFilter);
+  }
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    filtered = filtered.filter((ev) =>
+      (ev.event || "").toLowerCase().includes(q) ||
+      (ev.local || "").toLowerCase().includes(q) ||
+      (ev.rep || "").toLowerCase().includes(q)
+    );
+  }
+  return filtered;
+}
+
 function render() {
   const list = el("list");
   const title = el("dateBig");
@@ -207,7 +225,7 @@ function render() {
   if (viewMode === "dia") {
     title.textContent = fmtBig(selectedDate);
     sub.textContent = fmtSmall(selectedDate);
-    const evs = sortEvents(eventsByDate.get(isoKey(selectedDate)) || []);
+    const evs = getFilteredEvents(sortEvents(eventsByDate.get(isoKey(selectedDate)) || []));
     if (evs.length) {
       list.innerHTML = evs.map(eventCard).join("");
     } else {
@@ -224,7 +242,7 @@ function render() {
     for (let i = 0; i < 7; i++) {
       const day = addDays(start, i);
       const key = isoKey(day);
-      const evs = sortEvents(eventsByDate.get(key) || []);
+      const evs = getFilteredEvents(sortEvents(eventsByDate.get(key) || []));
       html += `<div class="period"><div class="period-head">
         <span class="pd">${day.toLocaleDateString("pt-BR", { weekday: "short" })}</span>
         <span class="pd-num">${day.getDate()}</span>
@@ -242,7 +260,7 @@ function render() {
     let day = startOfMonth(selectedDate);
     while (day.getMonth() === selectedDate.getMonth()) {
       const key = isoKey(day);
-      const evs = sortEvents(eventsByDate.get(key) || []);
+      const evs = getFilteredEvents(sortEvents(eventsByDate.get(key) || []));
       if (evs.length) {
         html += `<div class="period"><div class="period-head">
           <span class="pd">${day.toLocaleDateString("pt-BR", { weekday: "short" })}</span>
@@ -256,6 +274,7 @@ function render() {
     }
     list.innerHTML = html || `<div class="empty">Nenhum compromisso neste mês.</div>`;
   }
+  updateTodayBtn();
   wireCards(list);
 }
 
@@ -292,7 +311,13 @@ function escapeHtml(s) {
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
   );
 }
-function updateSyncInfo() {
+function updateTodayBtn() {
+  const btn = el("todayBtn");
+  if (!btn) return;
+  const today = startOfDay(new Date());
+  const isToday = isoKey(selectedDate) === isoKey(today);
+  btn.classList.toggle("today-indicator", isToday);
+}
   el("syncInfo").textContent = lastSync
     ? `Sincronizado ${lastSync.toLocaleTimeString("pt-BR")} · ${eventsByDate.size} dias`
     : "";
@@ -421,6 +446,10 @@ function openLoc(row) {
     ev.local = overlay.querySelector("#locTxt").value.trim();
     overlay.remove();
     await saveEvent(ev);
+    if (ev.local) {
+      const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ev.local)}`;
+      window.open(url, "_blank");
+    }
   };
 }
 
@@ -722,6 +751,37 @@ async function boot() {
   document.querySelectorAll(".modebtn").forEach((b) => {
     b.onclick = () => setMode(b.dataset.mode);
   });
+  document.querySelectorAll("#filterBar button").forEach((b) => {
+    b.onclick = () => {
+      currentFilter = b.dataset.filter;
+      document.querySelectorAll("#filterBar button").forEach((x) => x.classList.toggle("active", x === b));
+      render();
+    };
+  });
+  const searchInput = el("searchInput");
+  if (searchInput) {
+    searchInput.addEventListener("input", (e) => {
+      searchQuery = e.target.value.trim();
+      render();
+    });
+  }
+  const testNotifBtn = el("testNotifBtn");
+  if (testNotifBtn) {
+    testNotifBtn.onclick = async () => {
+      if (!("Notification" in window)) { toast("Notificacoes nao suportadas."); return; }
+      let perm = Notification.permission;
+      if (perm === "default") perm = await Notification.requestPermission();
+      if (perm === "granted") {
+        new Notification("Agenda do Prefeito", {
+          body: "Teste de notificacao funcionando!",
+          icon: "icon.svg",
+        });
+        toast("Notificacao de teste enviada");
+      } else {
+        toast("Permissao de notificacao negada.");
+      }
+    };
+  }
   window.addEventListener("online", () => {
     el("offlinePill").classList.remove("show");
     if (accessToken) loadEvents().then(render).catch(() => {});
