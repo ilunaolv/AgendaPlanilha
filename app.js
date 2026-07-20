@@ -318,11 +318,12 @@ function updateTodayBtn() {
   const isToday = isoKey(selectedDate) === isoKey(today);
   btn.classList.toggle("today-indicator", isToday);
 }
+function updateSyncInfo() {
   el("syncInfo").textContent = lastSync
     ? `Sincronizado ${lastSync.toLocaleTimeString("pt-BR")} · ${eventsByDate.size} dias`
     : "";
   updatePendingBtn();
-
+}
 function updatePendingBtn() {
   const btn = el("updatePendingBtn");
   if (!btn) return;
@@ -342,8 +343,25 @@ function checkPendingUpdate() {
 
 function toggleNotif(row) {
   const ev = findEventByRow(row);
+  if (!ev) return;
   const key = `agenda_notif_${row}`;
   const current = localStorage.getItem(key) === "1";
+  
+  if (!current) {
+    const now = new Date();
+    const evDate = parseKey(isoKey(selectedDate));
+    const timeStr = (ev.time || "").replace(/[^0-9]/g, "");
+    if (timeStr) {
+      const hh = parseInt(timeStr.slice(0, 2), 10) || 0;
+      const mm = parseInt(timeStr.slice(2, 4), 10) || 0;
+      evDate.setHours(hh, mm, 0, 0);
+      if (evDate <= now) {
+        toast("Este evento ja esta ocorrendo ou ja ocorreu.");
+        return;
+      }
+    }
+  }
+  
   localStorage.setItem(key, current ? "0" : "1");
   render();
   if (current) {
