@@ -159,6 +159,9 @@
     }
     .modal-actions { display: flex; gap: 8px; margin-top: 16px; }
     .modal-actions button { flex: 1; justify-content: center; border: 1px solid var(--line); }
+    .loclink { display: block; margin-top: 8px; color: var(--accent-2); text-decoration: none; font-size: .85rem; }
+    .notifbtn { background: none; border: 1px solid var(--line); padding: 4px 8px; border-radius: 8px; font-size: .9rem; }
+    .notifbtn.on { background: var(--amber-bg); border-color: var(--amber); }
   </style>
 </head>
 <body>
@@ -166,7 +169,6 @@
     <h1>Agenda do Prefeito<span class="offline-pill" id="offlinePill">offline</span></h1>
     <div class="spacer"></div>
     <button id="themeBtn" title="Alternar tema">🌙</button>
-    <button id="notifBtn" title="Notificações">🔔</button>
     <button id="refreshBtn" title="Atualizar">↻</button>
     <button id="loginBtn" class="primary">Entrar com Google</button>
     <button id="logoutBtn" style="display:none">Sair</button>

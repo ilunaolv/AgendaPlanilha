@@ -17,7 +17,6 @@ let selectedDate = startOfDay(new Date());
 let viewMode = "dia";
 let lastSync = null;
 let refreshTimer = null;
-let notifPermission = "default";
 
 /* ---------- persistência de token ---------- */
 
@@ -163,8 +162,6 @@ function show(view) {
   el("loader").style.display = view === "loader" ? "block" : "none";
   el("loginBtn").style.display = accessToken ? "none" : "inline-flex";
   el("logoutBtn").style.display = accessToken ? "inline-flex" : "none";
-  const nb = el("notifBtn");
-  if (nb) nb.style.display = accessToken ? "inline-flex" : "none";
 }
 
 function eventCard(e) {
@@ -183,9 +180,12 @@ function eventCard(e) {
   const act = (val) => `mini${p === val ? " active-" + val.toLowerCase() : ""}`;
   const subField = `<button class="pickbtn" data-row="${e.rowIndex}">Selecionar quem vai no lugar</button>`;
   const locBtn = `<button class="locbtn" data-row="${e.rowIndex}">📍 ${e.local ? "Abrir no Maps" : "Informar local"}</button>`;
+  const notifKey = `agenda_notif_${e.rowIndex}`;
+  const notifOn = localStorage.getItem(notifKey) === "1";
+  const notifBtn = `<button class="notifbtn ${notifOn ? "on" : ""}" data-row="${e.rowIndex}" title="Notificacao">🔔</button>`;
   return `
   <div class="card">
-    <div class="time">🕑 ${escapeHtml(e.time || "—")} ${badge}</div>
+    <div class="time">🕑 ${escapeHtml(e.time || "—")} ${badge} ${notifBtn}</div>
     <div class="event">${escapeHtml(e.event || "(sem título)")}</div>
     <div class="meta">${note}${loc}${repTag}${sub}</div>
     <div class="actions">
@@ -274,6 +274,9 @@ function wireCards(list) {
   list.querySelectorAll("button.locbtn").forEach((b) => {
     b.onclick = () => openLoc(Number(b.dataset.row));
   });
+  list.querySelectorAll("button.notifbtn").forEach((b) => {
+    b.onclick = () => toggleNotif(Number(b.dataset.row));
+  });
 }
 
 function findEventByRow(row) {
@@ -292,6 +295,40 @@ function updateSyncInfo() {
   el("syncInfo").textContent = lastSync
     ? `Sincronizado ${lastSync.toLocaleTimeString("pt-BR")} · ${eventsByDate.size} dias`
     : "";
+}
+
+/* ---------- notificacoes por evento ---------- */
+
+function toggleNotif(row) {
+  const key = `agenda_notif_${row}`;
+  const current = localStorage.getItem(key) === "1";
+  localStorage.setItem(key, current ? "0" : "1");
+  render();
+  toast(current ? "Notificacao desativada" : "Notificacao ativada para este evento");
+  if (!current) checkNotifNow();
+}
+async function checkNotifNow() {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const now = new Date();
+  for (const [key, evs] of eventsByDate) {
+    for (const ev of evs) {
+      if (localStorage.getItem(`agenda_notif_${ev.rowIndex}`) !== "1") continue;
+      if (ev.presence !== "Sim") continue;
+      const timeStr = (ev.time || "").replace(/[^0-9]/g, "");
+      if (!timeStr) continue;
+      const hh = parseInt(timeStr.slice(0, 2), 10) || 0;
+      const mm = parseInt(timeStr.slice(2, 4), 10) || 0;
+      const evDate = parseKey(key);
+      evDate.setHours(hh, mm, 0, 0);
+      const diff = evDate - now;
+      if (diff > 0 && diff < 60 * 60 * 1000) {
+        new Notification("Agenda do Prefeito", {
+          body: `🕑 ${ev.time || ""} — ${ev.event || "Evento"}`,
+          icon: "icon.svg",
+        });
+      }
+    }
+  }
 }
 
 /* ---------- modais ---------- */
@@ -363,57 +400,6 @@ function openLoc(row) {
     overlay.remove();
     await saveEvent(ev);
   };
-}
-
-/* ---------- notificações ---------- */
-
-async function requestNotifPermission() {
-  if (!("Notification" in window)) { toast("Notificações não suportadas."); return; }
-  let perm = Notification.permission;
-  if (perm === "default") {
-    perm = await Notification.requestPermission();
-  }
-  notifPermission = perm;
-  updateNotifBtn();
-  if (perm === "granted") {
-    toast("Notificações ativadas ✓");
-    scheduleNotifCheck();
-  } else {
-    toast("Notificações bloqueadas.");
-  }
-}
-function updateNotifBtn() {
-  const btn = el("notifBtn");
-  if (!btn) return;
-  if (notifPermission === "granted") btn.textContent = "🔔";
-  else if (notifPermission === "denied") btn.textContent = "🔕";
-  else btn.textContent = "🔔";
-}
-function scheduleNotifCheck() {
-  if (!("Notification" in window) || Notification.permission !== "granted") return;
-  const now = new Date();
-  const upcoming = [];
-  for (const [key, evs] of eventsByDate) {
-    for (const ev of evs) {
-      if (ev.presence !== "Sim") continue;
-      const timeStr = (ev.time || "").replace(/[^0-9]/g, "");
-      if (!timeStr) continue;
-      const hh = parseInt(timeStr.slice(0, 2), 10) || 0;
-      const mm = parseInt(timeStr.slice(2, 4), 10) || 0;
-      const evDate = parseKey(key);
-      evDate.setHours(hh, mm, 0, 0);
-      const diff = evDate - now;
-      if (diff > 0 && diff < 60 * 60 * 1000) {
-        upcoming.push(ev);
-      }
-    }
-  }
-  if (upcoming.length) {
-    new Notification("Agenda do Prefeito", {
-      body: `${upcoming.length} evento(s) nas próximas 1h`,
-      icon: "icon.svg",
-    });
-  }
 }
 
 /* ---------- Google auth + Sheets ---------- */
@@ -497,7 +483,6 @@ async function afterLogin() {
     show("app");
     render();
     scheduleRefresh();
-    updateNotifBtn();
     toast(`Sincronizado: ${eventsByDate.size} dias`);
     console.log("[agenda] carregado, eventos:", eventsByDate.size, "dias");
   } catch (e) {
@@ -643,7 +628,7 @@ async function saveEvent(ev) {
 function scheduleRefresh() {
   clearInterval(refreshTimer);
   refreshTimer = setInterval(async () => {
-    try { await loadEvents(); render(); } catch (_) {}
+    try { await loadEvents(); render(); checkNotifNow(); } catch (_) {}
   }, CONFIG.REFRESH_MIN * 60000);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && accessToken) {
@@ -693,7 +678,6 @@ async function boot() {
   el("loginBtn").onclick = signIn;
   el("loginBtn2").onclick = signIn;
   el("logoutBtn").onclick = signOut;
-  el("notifBtn").onclick = requestNotifPermission;
   el("refreshBtn").onclick = async () => {
     showLoading(true, "Atualizando…");
     try { await loadEvents(); render(); toast("Atualizado"); }
