@@ -78,7 +78,9 @@
     .card .meta { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
     .tag { font-size: .78rem; padding: 4px 9px; border-radius: 999px; background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
     .tag.note { color: var(--muted); }
-    .tag.note.hi { color: #04201d; background: var(--accent-2); border-color: var(--accent-2); font-weight: 700; }
+    .tag.note.gray { color: var(--muted); background: var(--panel-2); border-color: var(--line); }
+    .tag.note.orange { color: #7c2d12; background: var(--amber-bg); border-color: var(--amber); }
+    .tag.note.blue { color: #082f49; background: #bae6fd; border-color: #028DCF; font-weight: 700; }
     .tag.rep { background: #14323a; color: #5eead4; border-color: #145e57; }
     body.light .tag.rep { background: #d7f5f0; color: #0d6e63; border-color: #a7e3da; }
     .tag.loc { color: var(--accent-2); border-color: var(--accent); }
@@ -198,6 +200,7 @@
         <button id="nextDay">›</button>
       </div>
       <div class="sync" id="syncInfo"></div>
+      <button id="updatePendingBtn" style="display:none;margin-bottom:12px;background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber);border-radius:9px;padding:8px 12px;font-size:.82rem;width:100%">⚠️ Atualização pendente</button>
       <div id="list"></div>
     </div>
 

@@ -17,6 +17,8 @@ let selectedDate = startOfDay(new Date());
 let viewMode = "dia";
 let lastSync = null;
 let refreshTimer = null;
+let hasUpdatePending = false;
+const LAST_VERSION_KEY = "agenda_last_version";
 
 /* ---------- persistência de token ---------- */
 
@@ -126,11 +128,7 @@ function timeKey(s) {
   return (s || "99").replace(/[^0-9]/g, "").padStart(4, "0");
 }
 function sortEvents(arr) {
-  return [...arr].sort((a, b) => {
-    const dn = noteNum(b.note) - noteNum(a.note);
-    if (dn !== 0) return dn;
-    return timeKey(a.time).localeCompare(timeKey(b.time));
-  });
+  return [...arr].sort((a, b) => timeKey(a.time).localeCompare(timeKey(b.time)));
 }
 function normPresence(p) {
   if (p === "Sim") return "Sim";
@@ -172,7 +170,10 @@ function eventCard(e) {
     : p === "Reservar" ? `<span class="badge res">Reservar</span>`
     : isNo ? `<span class="badge nao">Não comparece</span>` : "";
   const noteVal = noteNum(e.note);
-  const noteCls = noteVal >= 7 ? "note hi" : "note";
+  let noteCls = "note";
+  if (noteVal >= 9) noteCls = "note blue";
+  else if (noteVal >= 7) noteCls = "note orange";
+  else if (noteVal >= 1) noteCls = "note gray";
   const note = e.note ? `<span class="tag ${noteCls}">📝 Nota ${escapeHtml(e.note)}</span>` : "";
   const loc = e.local ? `<span class="tag loc">📍 ${escapeHtml(e.local)}</span>` : "";
   const sub = isNo && e.rep ? `<span class="tag rep">➡️ No lugar: ${escapeHtml(e.rep)}</span>` : "";
@@ -295,16 +296,37 @@ function updateSyncInfo() {
   el("syncInfo").textContent = lastSync
     ? `Sincronizado ${lastSync.toLocaleTimeString("pt-BR")} · ${eventsByDate.size} dias`
     : "";
+  updatePendingBtn();
+}
+function updatePendingBtn() {
+  const btn = el("updatePendingBtn");
+  if (!btn) return;
+  btn.style.display = hasUpdatePending ? "block" : "none";
+}
+function checkPendingUpdate() {
+  const savedVer = localStorage.getItem(LAST_VERSION_KEY);
+  const curVer = "v" + new Date().toISOString().slice(0, 10);
+  hasUpdatePending = savedVer !== curVer;
+  if (hasUpdatePending) {
+    localStorage.setItem(LAST_VERSION_KEY, curVer);
+  }
+  updatePendingBtn();
 }
 
 /* ---------- notificacoes por evento ---------- */
 
 function toggleNotif(row) {
+  const ev = findEventByRow(row);
   const key = `agenda_notif_${row}`;
   const current = localStorage.getItem(key) === "1";
   localStorage.setItem(key, current ? "0" : "1");
   render();
-  toast(current ? "Notificacao desativada" : "Notificacao ativada para este evento");
+  if (current) {
+    toast("Notificacao desativada");
+  } else {
+    const timeStr = ev && ev.time ? `às ${ev.time}` : "";
+    toast(`Voce recebera uma notificacao 1h antes do evento ${timeStr}`);
+  }
   if (!current) checkNotifNow();
 }
 async function checkNotifNow() {
@@ -675,10 +697,20 @@ function initTheme() {
 
 async function boot() {
   initTheme();
+  checkPendingUpdate();
   el("loginBtn").onclick = signIn;
   el("loginBtn2").onclick = signIn;
   el("logoutBtn").onclick = signOut;
   el("refreshBtn").onclick = async () => {
+    showLoading(true, "Atualizando…");
+    try { await loadEvents(); render(); toast("Atualizado"); }
+    catch (e) { toast("Erro ao atualizar"); }
+    finally { showLoading(false); }
+  };
+  const upBtn = el("updatePendingBtn");
+  if (upBtn) upBtn.onclick = async () => {
+    hasUpdatePending = false;
+    updatePendingBtn();
     showLoading(true, "Atualizando…");
     try { await loadEvents(); render(); toast("Atualizado"); }
     catch (e) { toast("Erro ao atualizar"); }
