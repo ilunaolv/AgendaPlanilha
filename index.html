@@ -160,7 +160,8 @@
       border-radius: 9px; padding: 9px 11px; font: inherit;
     }
     .modal-actions { display: flex; gap: 8px; margin-top: 16px; }
-    .modal-actions button { flex: 1; justify-content: center; border: 1px solid var(--line); }
+    .modal-actions button { flex: 1; justify-content: center; border: 1px solid var(--line); color: var(--text); background: var(--panel-2); }
+    .modal-actions button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
     .loclink { display: block; margin-top: 8px; color: var(--accent-2); text-decoration: none; font-size: .85rem; }
     .notifbtn { background: none; border: 1px solid var(--line); padding: 4px 8px; border-radius: 8px; font-size: .9rem; }
     .notifbtn.on { background: var(--amber-bg); border-color: var(--amber); }
@@ -175,7 +176,7 @@
 </head>
 <body>
   <header>
-    <h1>Agenda do Prefeito<span class="offline-pill" id="offlinePill">offline</span></h1>
+    <h1>Agenda Prefeito<span class="offline-pill" id="offlinePill">offline</span></h1>
     <div class="spacer"></div>
     <button id="themeBtn" title="Alternar tema">🌙</button>
     <button id="refreshBtn" title="Atualizar">↻</button>
@@ -224,7 +225,7 @@
     <div class="loader" id="loader" style="display:none">Carregando agenda…</div>
   </main>
 
-  <footer>Agenda do Prefeito · PWA</footer>
+  <footer>Agenda do Prefeito · Seplan | Praia Grande</footer>
   <div class="toast" id="toast"></div>
 
   <div class="loading-overlay" id="loadingOverlay">
