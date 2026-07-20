@@ -8,6 +8,8 @@ const PEOPLE = (window.AGENDACONFIG && window.AGENDACONFIG.PEOPLE) || [];
 
 const GAPI_LOADER = "https://apis.google.com/js/api.js";
 const GIS_LOADER = "https://accounts.google.com/gsi/client";
+const NOTIF_ADVANCE_MS = (CONFIG.NOTIF_ADVANCE_MIN || 60) * 60 * 1000;
+const SCRIPT_TIMEOUT_MS = 15000;
 
 let tokenClient = null;
 let accessToken = null;
@@ -360,7 +362,7 @@ function toggleNotif(row) {
         toast("Este evento ja esta ocorrendo ou ja ocorreu.");
         return;
       }
-      if (diff < 60 * 60 * 1000) {
+      if (diff < NOTIF_ADVANCE_MS) {
         const mins = Math.floor(diff / 60000);
         toast(`O evento iniciara em ${mins} minuto(s).`);
         localStorage.setItem(notifKey, "1");
@@ -381,8 +383,9 @@ function toggleNotif(row) {
   if (current) {
     toast("Notificacao desativada");
   } else {
+    const advanceMin = Math.floor(NOTIF_ADVANCE_MS / 60000);
     const timeStr = ev && ev.time ? `às ${ev.time}` : "";
-    toast(`Voce recebera uma notificacao 1h antes do evento ${timeStr}`);
+    toast(`Voce recebera uma notificacao ${advanceMin} min antes do evento ${timeStr}`);
   }
   if (!current) checkNotifNow();
 }
@@ -400,7 +403,7 @@ async function checkNotifNow() {
       const evDate = parseKey(key);
       evDate.setHours(hh, mm, 0, 0);
       const diff = evDate - now;
-      if (diff > 0 && diff < 60 * 60 * 1000) {
+      if (diff > 0 && diff < NOTIF_ADVANCE_MS) {
         const mins = Math.floor(diff / 60000);
         const body = mins > 0
           ? `Inicia em ${mins} minuto(s) — ${ev.event || "Evento"}`
@@ -501,14 +504,27 @@ function loadScript(src) {
     document.head.appendChild(s);
   });
 }
+async function withTimeout(promise, ms, label) {
+  let timeout;
+  const wrapped = promise.then(
+    (v) => { clearTimeout(timeout); return v; },
+    (e) => { clearTimeout(timeout); throw e; }
+  );
+  return Promise.race([
+    wrapped,
+    new Promise((_, reject) => {
+      timeout = setTimeout(() => reject(new Error(`${label} excedeu o tempo limite (${ms / 1000}s).`)), ms);
+    }),
+  ]);
+}
 
 async function loadGapi() {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      await loadScript(GAPI_LOADER);
-      await new Promise((resolve) => gapi.load("client", () => resolve()));
-      await gapi.client.init({});
-      await gapi.client.load("https://sheets.googleapis.com/$discovery/rest?version=v4");
+      await withTimeout(loadScript(GAPI_LOADER), SCRIPT_TIMEOUT_MS, "Carregamento do Google API");
+      await withTimeout(new Promise((resolve) => gapi.load("client", () => resolve())), SCRIPT_TIMEOUT_MS, "Inicializacao do gapi");
+      await withTimeout(gapi.client.init({}), SCRIPT_TIMEOUT_MS, "Inicializacao do cliente Google");
+      await withTimeout(gapi.client.load("https://sheets.googleapis.com/$discovery/rest?version=v4"), SCRIPT_TIMEOUT_MS, "Carregamento do Sheets API");
       console.log("[agenda] gapi carregado (tentativa", attempt, ")");
       return;
     } catch (e) {
@@ -524,7 +540,7 @@ async function ensureGapi() {
 }
 async function ensureGsi() {
   if (typeof google === "undefined" || !google.accounts || !google.accounts.oauth2) {
-    await loadScript(GIS_LOADER);
+    await withTimeout(loadScript(GIS_LOADER), SCRIPT_TIMEOUT_MS, "Carregamento do Google Identity");
   }
 }
 
@@ -833,13 +849,18 @@ async function boot() {
     } catch (e) {
       console.error("[agenda] falha ao reusar token:", e);
       clearToken();
+      showLoading(false);
       show("login");
+      toast("Nao foi possivel reconectar. Faca login novamente.");
     }
   } else {
     show("login");
     initAuth()
       .then(() => console.log("[agenda] pronto para login"))
-      .catch((e) => { console.error("[agenda] erro initAuth:", e); toast("Erro ao iniciar: " + e.message); });
+      .catch((e) => {
+        console.error("[agenda] erro initAuth:", e);
+        toast("Erro ao iniciar: " + (e && e.message ? e.message : "verifique sua conexao"));
+      });
   }
 }
 
