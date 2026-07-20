@@ -618,7 +618,6 @@ async function debugConnection() {
     if (!accessToken) { toast("Faça login primeiro."); showLoading(false); return; }
     gapi.client.setToken({ access_token: accessToken });
     await loadEvents();
-    const datas = [...eventsByDate.keys()].sort();
     const overlay = document.createElement("div");
     overlay.className = "overlay";
     const datas = [...eventsByDate.keys()].sort();
