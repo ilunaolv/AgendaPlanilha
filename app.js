@@ -1,6 +1,5 @@
 /* =========================================================================
    Agenda do Prefeito — PWA
-   Lê a aba "Prefeito" de uma planilha Google Sheets autenticada via Google.
    Compatível com iOS/Safari. Credenciais em config.js (ver config.example.js).
    ========================================================================= */
 
@@ -19,14 +18,12 @@ let viewMode = "dia";
 let lastSync = null;
 let refreshTimer = null;
 
-/* ---------- persistência de token (evita re-login no refresh) ---------- */
+/* ---------- persistência de token ---------- */
 
 function saveToken(tok, expiresIn) {
   accessToken = tok;
   tokenExpiry = Date.now() + (expiresIn || 3600) * 1000;
-  try {
-    localStorage.setItem("agenda_token", JSON.stringify({ tok, exp: tokenExpiry }));
-  } catch (_) {}
+  try { localStorage.setItem("agenda_token", JSON.stringify({ tok, exp: tokenExpiry })); } catch (_) {}
 }
 function loadToken() {
   try {
@@ -155,7 +152,8 @@ function toast(msg) {
 function showLoading(on, msg) {
   const o = el("loadingOverlay");
   if (!o) return;
-  o.querySelector(".loading-msg").textContent = msg || "Carregando…";
+  const m = o.querySelector(".loading-msg");
+  if (m) m.textContent = msg || "Carregando…";
   o.style.display = on ? "flex" : "none";
 }
 function show(view) {
@@ -179,7 +177,6 @@ function eventCard(e) {
   const loc = e.local ? `<span class="tag loc">📍 ${escapeHtml(e.local)}</span>` : "";
   const sub = isNo && e.rep ? `<span class="tag rep">➡️ No lugar: ${escapeHtml(e.rep)}</span>` : "";
   const repTag = !isNo && e.rep ? `<span class="tag rep">👤 ${escapeHtml(e.rep)}</span>` : "";
-  // Botões de status com estado ativo
   const act = (val) => `mini${p === val ? " active-" + val.toLowerCase() : ""}`;
   const subField = isNo
     ? `<button class="pickbtn" data-row="${e.rowIndex}">Selecionar quem vai no lugar</button>`
@@ -427,15 +424,19 @@ async function initAuth() {
 async function afterLogin() {
   showLoading(true, "Carregando agenda…");
   try {
+    await ensureGapi();
     await loadEvents();
-    const keys = [...eventsByDate.keys()].sort();
-    selectedDate = keys.length ? parseKey(keys[0]) : startOfDay(new Date());
+    selectedDate = startOfDay(new Date());
     show("app");
     render();
     scheduleRefresh();
+    console.log("[agenda] carregado, eventos:", eventsByDate.size, "dias");
   } catch (e) {
+    console.error("[agenda] afterLogin erro:", e);
     toast("Não foi possível carregar: " + e.message);
+    selectedDate = startOfDay(new Date());
     show("app");
+    render();
   } finally {
     showLoading(false);
   }
@@ -452,7 +453,6 @@ async function signIn() {
       tokenClient.requestAccessToken({ prompt: "" });
       didOpen = true;
     } catch (_) {
-      // fallback iOS/safari: força prompt de consentimento
       tokenClient.requestAccessToken({ prompt: "consent" });
       didOpen = true;
     }
@@ -609,7 +609,6 @@ async function boot() {
   });
   window.addEventListener("offline", () => el("offlinePill").classList.add("show"));
 
-  // Se já tem token válido, entra direto sem popup (evita re-login no refresh).
   if (loadToken()) {
     show("loader");
     try {
