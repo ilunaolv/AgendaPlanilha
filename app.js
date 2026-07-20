@@ -404,7 +404,18 @@ async function initAuth() {
       client_id: CONFIG.CLIENT_ID,
       scope: CONFIG.SCOPES,
       callback: async (resp) => {
-        if (resp.error) { toast("Erro de login: " + resp.error); showLoading(false); return; }
+        if (resp.error) {
+          showLoading(false);
+          if (resp.error === "origin_mismatch" || (resp.error_description || "").includes("origin_mismatch")) {
+            toast("Erro: origem não autorizada. Adicione a URL nas Origens JS do Google Cloud.");
+          } else if (resp.error === "access_denied") {
+            toast("Login cancelado.");
+          } else {
+            toast("Erro de login: " + (resp.error_description || resp.error));
+          }
+          console.error("[agenda] oauth error:", resp);
+          return;
+        }
         saveToken(resp.access_token, resp.expires_in);
         gapi.client.setToken({ access_token: accessToken });
         await afterLogin();
@@ -435,8 +446,17 @@ async function signIn() {
   try {
     if (!tokenClient) { toast("Preparando login…"); await initAuth(); }
     if (!tokenClient) { toast("Falha ao preparar login."); return; }
-    showLoading(true, "Aguardando login…");
-    tokenClient.requestAccessToken({ prompt: "" });
+    showLoading(true, "Abrindo login…");
+    let didOpen = false;
+    try {
+      tokenClient.requestAccessToken({ prompt: "" });
+      didOpen = true;
+    } catch (_) {
+      // fallback iOS/safari: força prompt de consentimento
+      tokenClient.requestAccessToken({ prompt: "consent" });
+      didOpen = true;
+    }
+    if (!didOpen) throw new Error("Não foi possível abrir o login Google.");
   } catch (e) {
     console.error("[agenda] erro signIn:", e);
     toast("Erro: " + e.message);
@@ -460,7 +480,9 @@ async function loadEvents() {
   });
   const rows = r.result.values || [];
   console.log("[agenda] linhas lidas:", rows.length);
+  if (!rows.length) console.warn("[agenda] planilha retornou vazio — verifique nome da aba/range");
   eventsByDate = new Map();
+  let loaded = 0;
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     const date = excelSerialToDate(row[0]);
@@ -472,14 +494,16 @@ async function loadEvents() {
       note: (row[3] || "").trim(),
       presence: (row[4] || "").trim(),
       rep: (row[5] || "").trim(),
-      local: (row[6] || "").trim(), // G = Local
+      local: (row[6] || "").trim(),
     };
     if (!ev.event && !ev.time) continue;
+    loaded++;
     const key = isoKey(date);
     if (!eventsByDate.has(key)) eventsByDate.set(key, []);
     eventsByDate.get(key).push(ev);
   }
-  console.log("[agenda] datas:", eventsByDate.size);
+  console.log("[agenda] eventos carregados:", loaded, "| datas:", eventsByDate.size);
+  if (!loaded) console.warn("[agenda] nenhum evento válido — verifique colunas/data/horário/evento");
   lastSync = new Date();
   updateSyncInfo();
 }
