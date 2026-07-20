@@ -178,13 +178,16 @@ Crie um PWA chamado "Agenda do Prefeito" com as seguintes especificações:
 
  5. NOTIFICAÇÕES:
     - Notificação por evento (sino no card)
-    - Aviso 1h antes do evento
+    - Aviso inteligente baseado no horário:
+      - Se evento já ocorreu (dia anterior ou horário passou): "Este evento ja ocorreu."
+      - Se evento está ocorrendo agora: "Este evento ja esta ocorrendo ou ja ocorreu."
+      - Se evento inicia em menos de 1h: "O evento iniciara em X minuto(s)."
+      - Se evento é mais de 1h: "Voce recebera uma notificacao 1h antes do evento."
     - Apenas para eventos com presença "Sim"
     - Botão de teste de notificação no header
     - Padrão Google: usa Notification API nativa do navegador
     - No mobile: aparece como notificação nativa do sistema (Android/iOS)
     - Persistência da preferência em localStorage
-    - Bloqueia notificação se evento já estiver ocorrendo
 
 6. GOOGLE MAPS:
    - Modal para informar local do evento
