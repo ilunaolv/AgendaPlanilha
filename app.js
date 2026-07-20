@@ -676,7 +676,7 @@ async function boot() {
       .then(() => console.log("[agenda] pronto para login"))
       .catch((e) => { console.error("[agenda] erro initAuth:", e); toast("Erro ao iniciar: " + e.message); });
   }
-}
+  el("refreshBtn").onclick = async () => {
     showLoading(true, "Atualizando…");
     try { await loadEvents(); render(); toast("Atualizado"); }
     catch (e) { toast("Erro ao atualizar"); }
