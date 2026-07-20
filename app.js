@@ -510,10 +510,16 @@ function showNotifModal(ev, reps, mins) {
   const overlay = document.createElement("div");
   overlay.className = "overlay";
   const repList = reps.map((r) => `<li>${escapeHtml(r)}</li>`).join("");
+  const {key} = findEventByRow(ev.rowIndex) || {};
+  const dateStr = key ? fmtBig(parseKey(key)) : "";
+  const timeStr = ev.time ? `às ${escapeHtml(ev.time)}` : "";
+  const localStr = ev.local ? `Local: ${escapeHtml(ev.local)}` : "";
+  const details = [dateStr, timeStr, localStr].filter(Boolean).join("<br>");
   overlay.innerHTML = `
     <div class="modal notif-modal">
       <h3>Notificação de evento</h3>
       <p><b>${escapeHtml(ev.event || "Evento")}</b> será realizado daqui ${mins} minuto(s).</p>
+      ${details ? `<p>${details}</p>` : ""}
       <p>Os representantes/acompanhantes abaixo irão comparecer:</p>
       <ul class="rep-list">${repList}</ul>
       <button class="primary close-btn" id="notifModalClose">Fechar</button>
