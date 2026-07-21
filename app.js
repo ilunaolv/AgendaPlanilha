@@ -483,7 +483,6 @@ async function checkNotifNow() {
   const now = new Date();
   for (const [key, evs] of eventsByDate) {
     for (const ev of evs) {
-      if (localStorage.getItem(`agenda_notif_${ev.rowIndex}`) !== "1") continue;
       const timeStr = (ev.time || "").replace(/[^0-9]/g, "");
       if (!timeStr) continue;
       const hh = parseInt(timeStr.slice(0, 2), 10) || 0;
@@ -493,19 +492,19 @@ async function checkNotifNow() {
       const diff = evDate - now;
       if (diff > 0 && diff < NOTIF_ADVANCE_MS) {
         const mins = Math.floor(diff / 60000);
-        if (ev.presence === "Não" || ev.presence === "Reservar") {
-          const reps = (ev.rep || "").split(",").map((s) => s.trim()).filter(Boolean);
-          if (reps.length) {
-            showNotifModal(ev, reps, mins);
-          }
+        const reps = (ev.rep || "").split(",").map((s) => s.trim()).filter(Boolean);
+        if (reps.length && (ev.presence === "Não" || ev.presence === "Reservar")) {
+          showNotifModal(ev, reps, mins);
         }
-        const body = mins > 0
-          ? `Inicia em ${mins} minuto(s) — ${ev.event || "Evento"}`
-          : `🕑 ${ev.time || ""} — ${ev.event || "Evento"}`;
-        new Notification("Agenda do Prefeito", {
-          body,
-          icon: "icon.svg",
-        });
+        if (localStorage.getItem(`agenda_notif_${ev.rowIndex}`) === "1") {
+          const body = mins > 0
+            ? `Inicia em ${mins} minuto(s) — ${ev.event || "Evento"}`
+            : `🕑 ${ev.time || ""} — ${ev.event || "Evento"}`;
+          new Notification("Agenda do Prefeito", {
+            body,
+            icon: "icon.svg",
+          });
+        }
       }
     }
   }
