@@ -697,7 +697,9 @@ async function afterLogin() {
   showLoading(true, "Carregando agenda…");
   try {
     await ensureGapi();
-    if ((CONFIG.SHEET_NAME || "").trim().toLowerCase() !== "prefeito") {
+    if ((CONFIG.SHEET_NAME || "").trim().toLowerCase().startsWith("prefeito")) {
+      // ok
+    } else {
       throw new Error("SHEET_NAME_INVALID");
     }
     await loadEvents();
