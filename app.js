@@ -408,8 +408,61 @@ function checkPendingUpdate() {
 
 /* ---------- notificacoes por evento ---------- */
 
+async function checkNotifNow(autoOpen) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const now = new Date();
+  for (const [key, evs] of eventsByDate) {
+    for (const ev of evs) {
+      const timeStr = (ev.time || "").replace(/[^0-9]/g, "");
+      if (!timeStr) continue;
+      const hh = parseInt(timeStr.slice(0, 2), 10) || 0;
+      const mm = parseInt(timeStr.slice(2, 4), 10) || 0;
+      const evDate = parseKey(key);
+      evDate.setHours(hh, mm, 0, 0);
+      const diff = evDate - now;
+      if (diff > 0 && diff < NOTIF_ADVANCE_MS) {
+        const mins = Math.floor(diff / 60000);
+        const reps = (ev.rep || "").split(",").map((s) => s.trim()).filter(Boolean);
+        if (reps.length && (ev.presence === "Não" || ev.presence === "Reservar")) {
+          showNotifModal(ev, reps, mins);
+        }
+        const body = mins > 0
+          ? `Inicia em ${mins} minuto(s) — ${ev.event || "Evento"}`
+          : `🕑 ${ev.time || ""} — ${ev.event || "Evento"}`;
+        new Notification("Agenda do Prefeito", {
+          body,
+          icon: "icon.svg",
+        });
+      }
+    }
+  }
+}
+function showNotifModal(ev, reps, mins) {
+  const overlay = document.createElement("div");
+  overlay.className = "overlay";
+  const repList = reps.map((r) => `<li>${escapeHtml(r)}</li>`).join("");
+  const {key} = findEventByRow(ev.rowIndex) || {};
+  const dateStr = key ? fmtBig(parseKey(key)) : "";
+  const timeStr = ev.time ? `às ${escapeHtml(ev.time)}` : "";
+  const localStr = ev.local ? `Local: ${escapeHtml(ev.local)}` : "";
+  const details = [dateStr, timeStr, localStr].filter(Boolean).join("<br>");
+  overlay.innerHTML = `
+    <div class="modal notif-modal">
+      <h3>Notificação de evento</h3>
+      <p><b>${escapeHtml(ev.event || "Evento")}</b> será realizado daqui ${mins} minuto(s).</p>
+      ${details ? `<p>${details}</p>` : ""}
+      <p>Os representantes/acompanhantes abaixo irão comparecer:</p>
+      <ul class="rep-list">${repList}</ul>
+      <button class="primary close-btn" id="notifModalClose">Fechar</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector("#notifModalClose").onclick = () => overlay.remove();
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+}
+
+/* ---------- modais ---------- */
+
 function openPicker(row) {
-  const {ev} = findEventByRow(row);
   if (!ev) return;
   const current = (ev.rep || "").split(",").map((s) => s.trim()).filter(Boolean);
   const others = current.filter((c) => !PEOPLE.includes(c));
@@ -900,11 +953,7 @@ async function boot() {
       let perm = Notification.permission;
       if (perm === "default") perm = await Notification.requestPermission();
       if (perm === "granted") {
-        new Notification("Agenda do Prefeito", {
-          body: "Teste de notificacao funcionando!",
-          icon: "icon.svg",
-        });
-        toast("Notificacao de teste enviada");
+        toast("Notificacoes ativadas");
       } else {
         toast("Permissao de notificacao negada.");
       }
