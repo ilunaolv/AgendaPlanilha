@@ -456,7 +456,6 @@ function toggleNotif(row) {
         toast(`O evento iniciara em ${mins} minuto(s).`);
         localStorage.setItem(notifKey, "1");
         render();
-        checkNotifNow();
         return;
       }
     } else {
@@ -478,7 +477,7 @@ function toggleNotif(row) {
   }
   if (!current) checkNotifNow();
 }
-async function checkNotifNow() {
+async function checkNotifNow(autoOpen) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   const now = new Date();
   for (const [key, evs] of eventsByDate) {
@@ -493,7 +492,8 @@ async function checkNotifNow() {
       if (diff > 0 && diff < NOTIF_ADVANCE_MS) {
         const mins = Math.floor(diff / 60000);
         const reps = (ev.rep || "").split(",").map((s) => s.trim()).filter(Boolean);
-        if (reps.length && (ev.presence === "Não" || ev.presence === "Reservar")) {
+        const showModal = autoOpen || localStorage.getItem(`agenda_notif_${ev.rowIndex}`) === "1";
+        if (showModal && reps.length && (ev.presence === "Não" || ev.presence === "Reservar")) {
           showNotifModal(ev, reps, mins);
         }
         if (localStorage.getItem(`agenda_notif_${ev.rowIndex}`) === "1") {
@@ -709,6 +709,7 @@ async function afterLogin() {
     scheduleRefresh();
     toast(`Sincronizado: ${eventsByDate.size} dias`);
     console.log("[agenda] carregado, eventos:", eventsByDate.size, "dias");
+    checkNotifNow(true);
   } catch (e) {
     console.error("[agenda] afterLogin erro:", e);
     const msg = (e && (e.message || e.error_description || JSON.stringify(e))) || "erro desconhecido";
@@ -933,7 +934,7 @@ async function saveEvent(ev) {
 function scheduleRefresh() {
   clearInterval(refreshTimer);
   refreshTimer = setInterval(async () => {
-    try { await loadEventsFresh(); autoEnableNotifForHighNotes(); render(); checkNotifNow(); } catch (_) {}
+    try { await loadEventsFresh(); autoEnableNotifForHighNotes(); render(); } catch (_) {}
   }, CONFIG.REFRESH_MIN * 60000);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && accessToken) {
