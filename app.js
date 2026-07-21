@@ -240,13 +240,9 @@ function eventCard(e) {
   const act = (val) => `mini${p === val ? " active-" + val.toLowerCase() : ""}`;
   const subField = `<button class="pickbtn" data-row="${e.rowIndex}">Selecionar representante/acompanhante</button>`;
   const locBtn = `<button class="locbtn" data-row="${e.rowIndex}">📍 ${e.local ? "Abrir no Maps" : "Informar local"}</button>`;
-  const notifKey = `agenda_notif_${e.rowIndex}`;
-  const notifOn = localStorage.getItem(notifKey) === "1";
-  const notifIcon = notifOn ? "🔔" : "🔕";
-  const notifBtn = `<button class="notif-icon ${notifOn ? "on" : ""}" data-row="${e.rowIndex}" title="Notificacao">${notifIcon}</button>`;
   return `
   <div class="card">
-    <div class="time">🕑 ${escapeHtml(e.time || "—")} ${badge} ${notifBtn}</div>
+    <div class="time">🕑 ${escapeHtml(e.time || "—")} ${badge}</div>
     <div class="event">${escapeHtml(e.event || "(sem título)")}</div>
     <div class="meta">${note}${loc}${repTag}${sub}</div>
     <div class="actions">
@@ -343,10 +339,6 @@ function wireCards(list) {
       if (!ev) return;
       ev.presence = b.dataset.act === "sim" ? "Sim" : b.dataset.act === "nao" ? "Não" : "Reservar";
       if (ev.presence !== "Não") ev.rep = "";
-      if (ev.presence === "Sim") {
-        const notifKey = `agenda_notif_${ev.rowIndex}`;
-        localStorage.setItem(notifKey, "1");
-      }
       if ((ev.presence === "Não" || ev.presence === "Reservar") && ev.rep) {
         const reps = ev.rep.split(",").map((s) => s.trim()).filter(Boolean);
         if (reps.length) {
@@ -371,9 +363,6 @@ function wireCards(list) {
   });
   list.querySelectorAll("button.locbtn").forEach((b) => {
     b.onclick = () => openLoc(Number(b.dataset.row));
-  });
-  list.querySelectorAll("button.notif-icon").forEach((b) => {
-    b.onclick = () => toggleNotif(Number(b.dataset.row));
   });
 }
 
@@ -418,121 +407,6 @@ function checkPendingUpdate() {
 }
 
 /* ---------- notificacoes por evento ---------- */
-
-function autoEnableNotifForHighNotes() {
-  for (const [key, evs] of eventsByDate) {
-    for (const ev of evs) {
-      const noteVal = noteNum(ev.note);
-      if (noteVal >= 9) {
-        const notifKey = `agenda_notif_${ev.rowIndex}`;
-        if (localStorage.getItem(notifKey) !== "1") {
-          localStorage.setItem(notifKey, "1");
-        }
-      }
-    }
-  }
-}
-function toggleNotif(row) {
-  const {key, ev} = findEventByRow(row);
-  if (!ev) return;
-  const notifKey = `agenda_notif_${row}`;
-  const current = localStorage.getItem(notifKey) === "1";
-  
-  if (!current) {
-    const now = new Date();
-    const evDate = parseKey(key);
-    const timeStr = (ev.time || "").replace(/[^0-9]/g, "");
-    if (timeStr) {
-      const hh = parseInt(timeStr.slice(0, 2), 10) || 0;
-      const mm = parseInt(timeStr.slice(2, 4), 10) || 0;
-      evDate.setHours(hh, mm, 0, 0);
-      const diff = evDate - now;
-      if (diff <= 0) {
-        toast("Este evento ja esta ocorrendo ou ja ocorreu.");
-        return;
-      }
-      if (diff < NOTIF_ADVANCE_MS) {
-        const mins = Math.floor(diff / 60000);
-        toast(`O evento iniciara em ${mins} minuto(s).`);
-        localStorage.setItem(notifKey, "1");
-        render();
-        return;
-      }
-    } else {
-      if (evDate < now) {
-        toast("Este evento ja ocorreu.");
-        return;
-      }
-    }
-  }
-  
-  localStorage.setItem(notifKey, current ? "0" : "1");
-  render();
-  if (current) {
-    toast("Notificacao desativada");
-  } else {
-    const advanceMin = Math.floor(NOTIF_ADVANCE_MS / 60000);
-    const timeStr = ev && ev.time ? `às ${ev.time}` : "";
-    toast(`Voce recebera uma notificacao ${advanceMin} min antes do evento ${timeStr}`);
-  }
-  if (!current) checkNotifNow();
-}
-async function checkNotifNow(autoOpen) {
-  if (!("Notification" in window) || Notification.permission !== "granted") return;
-  const now = new Date();
-  for (const [key, evs] of eventsByDate) {
-    for (const ev of evs) {
-      const timeStr = (ev.time || "").replace(/[^0-9]/g, "");
-      if (!timeStr) continue;
-      const hh = parseInt(timeStr.slice(0, 2), 10) || 0;
-      const mm = parseInt(timeStr.slice(2, 4), 10) || 0;
-      const evDate = parseKey(key);
-      evDate.setHours(hh, mm, 0, 0);
-      const diff = evDate - now;
-      if (diff > 0 && diff < NOTIF_ADVANCE_MS) {
-        const mins = Math.floor(diff / 60000);
-        const reps = (ev.rep || "").split(",").map((s) => s.trim()).filter(Boolean);
-        const showModal = autoOpen || localStorage.getItem(`agenda_notif_${ev.rowIndex}`) === "1";
-        if (showModal && reps.length && (ev.presence === "Não" || ev.presence === "Reservar")) {
-          showNotifModal(ev, reps, mins);
-        }
-        if (localStorage.getItem(`agenda_notif_${ev.rowIndex}`) === "1") {
-          const body = mins > 0
-            ? `Inicia em ${mins} minuto(s) — ${ev.event || "Evento"}`
-            : `🕑 ${ev.time || ""} — ${ev.event || "Evento"}`;
-          new Notification("Agenda do Prefeito", {
-            body,
-            icon: "icon.svg",
-          });
-        }
-      }
-    }
-  }
-}
-function showNotifModal(ev, reps, mins) {
-  const overlay = document.createElement("div");
-  overlay.className = "overlay";
-  const repList = reps.map((r) => `<li>${escapeHtml(r)}</li>`).join("");
-  const {key} = findEventByRow(ev.rowIndex) || {};
-  const dateStr = key ? fmtBig(parseKey(key)) : "";
-  const timeStr = ev.time ? `às ${escapeHtml(ev.time)}` : "";
-  const localStr = ev.local ? `Local: ${escapeHtml(ev.local)}` : "";
-  const details = [dateStr, timeStr, localStr].filter(Boolean).join("<br>");
-  overlay.innerHTML = `
-    <div class="modal notif-modal">
-      <h3>Notificação de evento</h3>
-      <p><b>${escapeHtml(ev.event || "Evento")}</b> será realizado daqui ${mins} minuto(s).</p>
-      ${details ? `<p>${details}</p>` : ""}
-      <p>Os representantes/acompanhantes abaixo irão comparecer:</p>
-      <ul class="rep-list">${repList}</ul>
-      <button class="primary close-btn" id="notifModalClose">Fechar</button>
-    </div>`;
-  document.body.appendChild(overlay);
-  overlay.querySelector("#notifModalClose").onclick = () => overlay.remove();
-  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
-}
-
-/* ---------- modais ---------- */
 
 function openPicker(row) {
   const {ev} = findEventByRow(row);
@@ -702,7 +576,6 @@ async function afterLogin() {
       throw new Error("SHEET_NAME_INVALID");
     }
     await loadEventsFresh();
-    autoEnableNotifForHighNotes();
     selectedDate = startOfDay(new Date());
     show("app");
     render();
@@ -934,11 +807,11 @@ async function saveEvent(ev) {
 function scheduleRefresh() {
   clearInterval(refreshTimer);
   refreshTimer = setInterval(async () => {
-    try { await loadEventsFresh(); autoEnableNotifForHighNotes(); render(); } catch (_) {}
+    try { await loadEventsFresh(); render(); } catch (_) {}
   }, CONFIG.REFRESH_MIN * 60000);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && accessToken) {
-      loadEventsFresh().then((r) => { autoEnableNotifForHighNotes(); render(); }).catch(() => {});
+      loadEventsFresh().then((r) => { render(); }).catch(() => {});
     }
   });
 }
