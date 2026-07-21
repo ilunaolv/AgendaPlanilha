@@ -372,7 +372,7 @@ function wireCards(list) {
   list.querySelectorAll("button.locbtn").forEach((b) => {
     b.onclick = () => openLoc(Number(b.dataset.row));
   });
-  list.querySelectorAll("button.notifbtn").forEach((b) => {
+  list.querySelectorAll("button.notif-icon").forEach((b) => {
     b.onclick = () => toggleNotif(Number(b.dataset.row));
   });
 }
