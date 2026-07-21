@@ -16,20 +16,21 @@ Este documento serve para você recriar todo o projeto do zero, exatamente como 
 2. **Sincronização com Google Sheets** — lê automaticamente os dados da planilha
 3. **Visualização por dia, semana e mês** — navegação entre períodos
 4. **Confirmação de presença** — botões "Vou", "Não vou" e "Reservar"
-5. **Selecionar quem vai no lugar** — lista de nomes para quem substitui (visível para todos os status)
-6. **Integração com Google Maps** — abre o local no Maps automaticamente
-7. **Notificações por evento** — sino em cada card com aviso 1h antes (padrão Google)
-8. **Notificação de teste** — botão no header para testar notificações
-9. **Filtro por status** — ver apenas confirmados, não vou ou reservar
-10. **Busca por evento** — campo de pesquisa por texto
-11. **Indicador de hoje** — destaca o dia atual no botão "Hoje"
-12. **Botão de atualização pendente** — avisa quando tem versão nova
-13. **Bloqueio por permissão** — se não tiver acesso à planilha, não entra
-14. **Tema claro/escuro** — alternância de tema
-15. **Modo offline** — funciona mesmo sem internet (cache)
-16. **Ordenação por horário** — eventos listados em ordem cronológica
-17. **Cores de nota** — 1-6 cinza, 7-8 laranja, 9-10 azul
-18. **Validação de notificação** — impede notificação de evento já ocorrido
+5. **Selecionar representante/acompanhante** — modal com lista de nomes cadastrados + campo “Outro…” (sempre visível no card)
+6. **Integração com Google Maps** — modal de local com link para Maps e abertura automática ao salvar
+7. **Notificações por evento** — notificação nativa do browser quando faltar 1h para o evento
+8. **Notificação de teste** — sino no header para ativar/desativar e testar permissão
+9. **Modal de notificação múltipla** — quando há vários avisos próximos, navega entre eles sem loop
+10. **Filtro por status** — ver apenas confirmados, não vou ou reservar
+11. **Busca por evento** — campo de pesquisa por texto
+12. **Indicador de hoje** — destaca o dia atual no botão "Hoje"
+13. **Atualização pendente** — avisa dentro do app quando tem nova versão e atualiza sem sair
+14. **Bloqueio por permissão** — se não tiver acesso à planilha, não entra
+15. **Tema claro/escuro** — alternância de tema
+16. **Modo offline** — funciona mesmo sem internet (cache)
+17. **Ordenação por horário** — eventos listados em ordem cronológica
+18. **Cores de nota** — 1-6 cinza, 7-8 laranja, 9-10 azul
+19. **Validação de notificação** — impede notificação de evento já ocorrido
 
 ---
 
@@ -37,15 +38,14 @@ Este documento serve para você recriar todo o projeto do zero, exatamente como 
 
 ```
 AgendaPlanilha/
-├── index.html          # Página principal do app
-├── app.js              # Lógica do aplicativo
-├── config.js           # Configurações (não commitado)
-├── config.example.js   # Exemplo de configuração
-├── manifest.webmanifest # Arquivo PWA
-├── sw.js               # Service Worker (cache offline)
-├── icon.svg            # Ícone do app
-└── .github/
-    └── workflows/      # Deploy automático (se houver)
+├── index.html            # Página principal do app
+├── app.js                # Lógica do aplicativo
+├── config.js             # Configurações (não commitado)
+├── config.example.js     # Exemplo de configuração
+├── manifest.webmanifest  # Arquivo PWA
+├── sw.js                 # Service Worker (cache offline)
+├── icon.svg              # Ícone do app
+└── PROMPT_PROJETO.md     # Documento para recriar o projeto
 ```
 
 ---
@@ -101,6 +101,7 @@ window.AGENDACONFIG = {
   SHEET_NAME: "Nome da Aba",
   SCOPES: "https://www.googleapis.com/auth/spreadsheets",
   REFRESH_MIN: 5,
+  NOTIF_ADVANCE_MIN: 60,
   PEOPLE: ["João", "Maria", "Pedro"]
 };
 ```
@@ -112,17 +113,21 @@ Crie o arquivo HTML com a estrutura básica, header, estilos CSS e containers pa
 ### Passo 6: Criar o arquivo app.js
 
 Implemente toda a lógica:
-- Gerenciamento de autenticação
-- Leitura da planilha
-- Renderização dos eventos
+- Gerenciamento de autenticação com Google OAuth
+- Leitura e escrita na planilha via Google Sheets API v4
+- Renderização dos eventos em cards
 - Modais para local e participantes
-- Notificações
+- Notificações com Notification API
 - Filtros e busca
+- Tema claro/escuro
+- Navegação dia/semana/mês
+- Botão de atualização pendente com reload automático
+- Validação de eventos já ocorridos
 
 ### Passo 7: Criar os arquivos PWA
 
 - `manifest.webmanifest` — configurações do app instalável
-- `sw.js` — service worker para cache offline
+- `sw.js` — service worker para cache offline e atualização
 
 ### Passo 8: Testar localmente
 
@@ -150,17 +155,17 @@ Crie um PWA chamado "Agenda do Prefeito" com as seguintes especificações:
    - Token salvo em localStorage com expiração
    - Logout funcional
    - Bloqueio de acesso se não tiver permissão na planilha (erro 403/401)
+   - Restrição de aba: app bloqueia se SHEET_NAME for diferente de "Prefeito"
 
- 2. GOOGLE SHEETS INTEGRATION:
-    - Ler dados da planilha usando Google Sheets API v4
-    - Colunas: Data | Horário | Evento | Nota | Presença | Quem vai no lugar | Local
-    - Suportar data em formato Excel serial (ex: 45934) ou texto (DD/MM/AAAA)
-    - Salvar alterações (presença, participantes, local) de volta na planilha
-    - Retry automático em caso de erro de rede
-    - Restrição de acesso: app bloqueia se SHEET_NAME for diferente de "Prefeito"
-    - Cache de autenticação para reduzir chamadas ao Google
-    - Cache de eventos em localStorage (TTL de 2 minutos)
-    - Cache de permissão negada (TTL de 10 minutos) para evitar requisições repetidas
+2. GOOGLE SHEETS INTEGRATION:
+   - Ler dados da planilha usando Google Sheets API v4
+   - Colunas: Data | Horário | Evento | Nota | Presença | Quem vai no lugar | Local
+   - Suportar data em formato Excel serial (ex: 45934) ou texto (DD/MM/AAAA)
+   - Salvar alterações (presença, participantes, local) de volta na planilha
+   - Retry automático em caso de erro de rede
+   - Cache de autenticação para reduzir chamadas ao Google
+   - Cache de eventos em localStorage (TTL de 2 minutos)
+   - Cache de permissão negada (TTL de 10 minutos) para evitar requisições repetidas
 
 3. UI/UX:
    - Tema escuro/claro com alternância
@@ -172,53 +177,55 @@ Crie um PWA chamado "Agenda do Prefeito" com as seguintes especificações:
    - Busca por texto no nome do evento, local ou participantes
    - Ordenação dos eventos por horário (cronológica)
 
- 4. EVENT CARDS:
-    - Mostrar horário, título, nota, local, participantes
-    - Badges coloridos por status (verde=Sim, vermelho=Não, amarelo=Reservar)
-    - Botões de ação: Vou, Não vou, Reservar
-    - Botão "Selecionar representante/acompanhante" (sempre visível)
-    - Botão de local com link para Google Maps
+4. EVENT CARDS:
+   - Mostrar horário, título, nota, local, participantes
+   - Badges coloridos por status (verde=Sim, vermelho=Não, amarelo=Reservar)
+   - Botões de ação: Vou, Não vou, Reservar
+   - Botão "Selecionar representante/acompanhante" sempre visível, abre modal com:
+     - Lista de pessoas pré-cadastradas (PEOPLE)
+     - Campo "Outro..." para digitar nome customizado
+   - Botão de local: se vazio, abre modal para informar endereço; se preenchido, abre link Google Maps
 
- 5. NOTIFICAÇÕES:
-    - Sem botão de sino por evento (notificação totalmente automática)
-    - Ativação automática se nota 9 ou 10
-    - Ativação automática ao confirmar "Vou"
-    - Ao marcar "Não vou" ou "Reservar" com representantes, exibir modal com:
-      - Nome do evento
-      - Data, horário e local
-      - Lista de representantes que irão comparecer
-      - Botão "Fechar" para confirmação de leitura
-    - Modal aparece automaticamente no login se houver evento < 1h com representantes
-    - Notificação nativa do sistema 1h antes do evento (apenas com app aberto)
-    - Padrão Google: usa Notification API nativa do navegador
-    - Validação: não permite notificação para eventos já ocorridos
-    - Persistência da preferência em localStorage
+5. NOTIFICAÇÕES:
+   - Sino no header para ativar/desativar notificações nativas
+   - Ao ativar, solicita permissão Notification e já verifica eventos próximos
+   - Agendamento automático: checa eventos dentro do intervalo NOTIF_ADVANCE_MIN
+   - Notificação nativa do sistema faltando NOTIF_ADVANCE_MIN para o evento
+   - Modal automático para eventos com representantes (Não/Reservar)
+   - Modal automático também para eventos sem representantes, se notificações ativadas
+   - Modal múltiplo: se houver vários avisos, permite navegar entre eles
+   - Sem loop: trava de navegação, botão "Próximo aviso (N restantes)" e no último mostra "Fechar"
+   - Validação: não permite notificação para eventos já ocorridos
+   - Persistência da preferência em localStorage (notifEnabled)
+   - Dentro do modal: mostra nome do evento, data, horário, local, lista de representantes
+   - Botão "Fechar" apenas no último aviso; clique fora fecha também
 
 6. GOOGLE MAPS:
    - Modal para informar local do evento
    - Link "Abrir no Google Maps" quando já houver endereço
    - Abre o Maps automaticamente ao salvar local
 
- 7. OFFLINE/CACHE:
-    - Service Worker para cache
-    - Cache de autenticação para reduzir chamadas ao Google
-    - Cache de eventos em localStorage (TTL de 2 minutos)
-    - Cache de permissão negada (TTL de 10 minutos) para evitar requisições repetidas
-    - Botão "Atualização pendente" se cache desatualizado
-    - Funciona offline com dados em cache
-    - Limpeza automática de cache ao fazer logout ou salvar evento
+7. OFFLINE/CACHE:
+   - Service Worker para cache com nome de versão
+   - Cache de autenticação para reduzir chamadas ao Google
+   - Cache de eventos em localStorage (TTL de 2 minutos)
+   - Cache de permissão negada (TTL de 10 minutos) para evitar requisições repetidas
+   - Botão "Atualização pendente" se versão do app mudou
+   - Funciona offline com dados em cache
+   - Limpeza automática de cache ao fazer logout ou salvar evento
+   - Botão de atualização pendente: força update do SW e recarrega a página
 
- 8. CONFIGURAÇÕES:
-    - Arquivo config.js separado com:
-      - CLIENT_ID (Google OAuth)
-      - SPREADSHEET_ID (ID da planilha)
-      - SHEET_NAME (nome da aba, deve ser exatamente "Prefeito")
-      - SCOPES (escopo da API)
-      - REFRESH_MIN (intervalo de atualização)
-      - NOTIF_ADVANCE_MIN (minutos de antecedência da notificação)
-      - PEOPLE (lista de pessoas para o picker)
-    - Arquivo config.example.js como template
-    - Restrição de acesso: app bloqueia se SHEET_NAME for diferente de "Prefeito"
+8. CONFIGURAÇÕES:
+   - Arquivo config.js separado com:
+     - CLIENT_ID (Google OAuth)
+     - SPREADSHEET_ID (ID da planilha)
+     - SHEET_NAME (nome da aba, deve ser exatamente "Prefeito")
+     - SCOPES (escopo da API)
+     - REFRESH_MIN (intervalo de atualização)
+     - NOTIF_ADVANCE_MIN (minutos de antecedência da notificação)
+     - PEOPLE (lista de pessoas para o picker)
+   - Arquivo config.example.js como template
+   - Restrição de acesso: app bloqueia se SHEET_NAME for diferente de "Prefeito"
 
 9. TECNOLOGIAS:
    - HTML/CSS/JS puro (sem frameworks)
@@ -230,6 +237,12 @@ Crie um PWA chamado "Agenda do Prefeito" com as seguintes especificações:
     - main: versão estável
     - melhorias: funcionalidades novas
     - modelo-inicial: cópia limpa da main
+
+11. VALIDAÇÕES:
+    - Não notificar eventos passados
+    - Impedir clique duplicado na navegação do modal de notificação
+    - Garantir que modal de múltiplos avisos sempre fecha no último item
+    - Garantir que botão "Atualização pendente" aparece quando APP_BUILD mudar e só some após clique/atualização
 
 Crie todos os arquivos necessários, com código limpo, comentado e pronto para uso.
 ```
@@ -267,11 +280,18 @@ O app verifica se a configuração `SHEET_NAME` é exatamente "Prefeito". Se for
 
 ### Como funcionam as notificações?
 O app usa a **Notification API nativa do navegador** (padrão Google):
-- Quando você ativa o sino em um evento, o app salva sua preferência
+- Quando você ativa o sino no header, o app solicita permissão e já verifica eventos próximos
 - Quando faltar 1h para o evento, o navegador exibe uma notificação nativa do sistema
 - No Android: aparece na barra de notificações como qualquer app
 - No iPhone: aparece como notificação do sistema (iOS 16.4+)
 - A notificação mostra: horário e título do evento
+- Se houver vários eventos próximos, abre modal para revisar um por um
+
+### Como funciona a atualização pendente?
+O app compara a versão interna com a versão salva no navegador:
+- Se for diferente, mostra o botão "Atualização pendente" dentro do app
+- Ao clicar, ele atualiza o Service Worker e recarrega a página automaticamente
+- Não precisa mais sair do app para ver melhorias
 
 ### Por que 3 branches?
 - **main**: sempre tem a versão que está funcionando, pronta para usar
@@ -361,11 +381,20 @@ git branch -d nome-da-branch
 ### Notificações não aparecem na tela do celular
 - Verifique se o app tem permissão de notificação (Configurações > Apps > Navegador > Notificações)
 - No Android, certifique-se que o app está adicionado à tela inicial (instalado como PWA)
-- Notificações só aparecem se o evento estiver a menos de 1h e você confirmou "Vou"
+- Notificações só aparecem se o evento estiver a menos de 1h
+
+### Modal de notificação com vários avisos entra em loop
+- O app agora trava a navegação entre avisos
+- No último aviso aparece "Fechar"
+- O contador de restantes nunca fica negativo
 
 ### App não atualiza
-- Limpe o cache do Safari (Configurações > Safari > Avançado > Dados)
-- Ou use o botão "Atualização pendente"
+- Clique no botão "Atualização pendente" no próprio app
+- Ele atualiza automaticamente sem precisar sair
+
+### Atualização pendente não aparece
+- Verifique se a versão no código mudou
+- O app detecta automaticamente quando há atualização
 
 ---
 
