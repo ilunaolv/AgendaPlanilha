@@ -477,7 +477,7 @@ async function checkNotifNow(autoOpen) {
     showNotifModal(ev, reps, mins, queue.length);
   }
   const body = mins > 0
-    ? ? `Inicia em ${mins} minuto(s) — ${ev.event || "Evento"}`
+    ? `Inicia em ${mins} minuto(s) — ${ev.event || "Evento"}`
     : `🕑 ${ev.time || ""} — ${ev.event || "Evento"}`;
   new Notification("Agenda do Prefeito", {
     body,
