@@ -29,6 +29,10 @@ const EVENTS_CACHE_KEY = "agenda_events_cache";
 const EVENTS_CACHE_TTL_MS = 2 * 60 * 1000;
 const PERMISSION_DENIED_CACHE_KEY = "agenda_permission_denied";
 const PERMISSION_DENIED_TTL_MS = 10 * 60 * 1000;
+const NOTIF_ENABLED_KEY = "agenda_notif_enabled";
+let notifEnabled = false;
+let notifQueue = [];
+let notifIndex = 0;
 
 /* ---------- persistência de token ---------- */
 
@@ -408,9 +412,45 @@ function checkPendingUpdate() {
 
 /* ---------- notificacoes por evento ---------- */
 
+function loadNotifEnabled() {
+  try {
+    notifEnabled = localStorage.getItem(NOTIF_ENABLED_KEY) === "1";
+  } catch (_) {
+    notifEnabled = false;
+  }
+}
+function saveNotifEnabled() {
+  try {
+    localStorage.setItem(NOTIF_ENABLED_KEY, notifEnabled ? "1" : "0");
+  } catch (_) {}
+}
+function updateNotifBtn() {
+  const btn = el("testNotifBtn");
+  if (!btn) return;
+  btn.textContent = notifEnabled ? "🔔" : "🔕";
+}
+async function toggleNotifPermission() {
+  if (!("Notification" in window)) {
+    toast("Notificacoes nao suportadas.");
+    return;
+  }
+  let perm = Notification.permission;
+  if (perm === "default") perm = await Notification.requestPermission();
+  if (perm === "granted") {
+    notifEnabled = !notifEnabled;
+    saveNotifEnabled();
+    updateNotifBtn();
+    toast(notifEnabled ? "Notificacoes ativadas" : "Notificacoes desativadas");
+  } else {
+    toast("Permissao de notificacao negada.");
+  }
+}
+
 async function checkNotifNow(autoOpen) {
+  if (!notifEnabled) return;
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   const now = new Date();
+  const queue = [];
   for (const [key, evs] of eventsByDate) {
     for (const ev of evs) {
       const timeStr = (ev.time || "").replace(/[^0-9]/g, "");
@@ -421,23 +461,23 @@ async function checkNotifNow(autoOpen) {
       evDate.setHours(hh, mm, 0, 0);
       const diff = evDate - now;
       if (diff > 0 && diff < NOTIF_ADVANCE_MS) {
-        const mins = Math.floor(diff / 60000);
-        const reps = (ev.rep || "").split(",").map((s) => s.trim()).filter(Boolean);
-        if (reps.length && (ev.presence === "Não" || ev.presence === "Reservar")) {
-          showNotifModal(ev, reps, mins);
-        }
-        const body = mins > 0
-          ? `Inicia em ${mins} minuto(s) — ${ev.event || "Evento"}`
-          : `🕑 ${ev.time || ""} — ${ev.event || "Evento"}`;
-        new Notification("Agenda do Prefeito", {
-          body,
-          icon: "icon.svg",
-        });
+        queue.push({ ev, mins: Math.floor(diff / 60000) });
       }
     }
   }
+  if (!queue.length) return;
+  notifQueue = queue;
+  notifIndex = 0;
+  const { ev, mins } = queue[0];
+  const reps = (ev.rep || "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (reps.length && (ev.presence === "Não" || ev.presence === "Reservar")) {
+    showNotifModal(ev, reps, mins, queue.length > 1);
+  }
 }
-function showNotifModal(ev, reps, mins) {
+
+let currentNotifOverlay = null;
+function showNotifModal(ev, reps, mins, hasMore) {
+  if (currentNotifOverlay) currentNotifOverlay.remove();
   const overlay = document.createElement("div");
   overlay.className = "overlay";
   const repList = reps.map((r) => `<li>${escapeHtml(r)}</li>`).join("");
@@ -446,6 +486,10 @@ function showNotifModal(ev, reps, mins) {
   const timeStr = ev.time ? `às ${escapeHtml(ev.time)}` : "";
   const localStr = ev.local ? `Local: ${escapeHtml(ev.local)}` : "";
   const details = [dateStr, timeStr, localStr].filter(Boolean).join("<br>");
+  const isLast = !hasMore && notifIndex >= notifQueue.length - 1;
+  const navHtml = hasMore
+    ? `<button class="primary" id="notifNext">Proximo aviso (${notifQueue.length - notifIndex - 1} restantes)</button>`
+    : "";
   overlay.innerHTML = `
     <div class="modal notif-modal">
       <h3>Notificação de evento</h3>
@@ -453,11 +497,35 @@ function showNotifModal(ev, reps, mins) {
       ${details ? `<p>${details}</p>` : ""}
       <p>Os representantes/acompanhantes abaixo irão comparecer:</p>
       <ul class="rep-list">${repList}</ul>
-      <button class="primary close-btn" id="notifModalClose">Fechar</button>
+      ${navHtml}
+      ${isLast ? `<button class="primary close-btn" id="notifModalClose">Fechar</button>` : ""}
     </div>`;
   document.body.appendChild(overlay);
-  overlay.querySelector("#notifModalClose").onclick = () => overlay.remove();
-  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  currentNotifOverlay = overlay;
+  const close = () => {
+    overlay.remove();
+    currentNotifOverlay = null;
+    notifQueue = [];
+    notifIndex = 0;
+  };
+  if (isLast) {
+    overlay.querySelector("#notifModalClose").onclick = close;
+  }
+  if (hasMore) {
+    const nextBtn = overlay.querySelector("#notifNext");
+    if (nextBtn) {
+      nextBtn.onclick = async () => {
+        overlay.remove();
+        notifIndex += 1;
+        const nextIdx = notifIndex % notifQueue.length;
+        const nextItem = notifQueue[nextIdx];
+        const nextReps = (nextItem.ev.rep || "").split(",").map((s) => s.trim()).filter(Boolean);
+        const more = notifQueue.length > 1;
+        showNotifModal(nextItem.ev, nextReps, nextItem.mins, more);
+      };
+    }
+  }
+  overlay.onclick = (e) => { if (e.target === overlay) close(); };
 }
 
 /* ---------- modais ---------- */
@@ -635,7 +703,7 @@ async function afterLogin() {
     scheduleRefresh();
     toast(`Sincronizado: ${eventsByDate.size} dias`);
     console.log("[agenda] carregado, eventos:", eventsByDate.size, "dias");
-    checkNotifNow(true);
+    if (notifEnabled) checkNotifNow(true);
   } catch (e) {
     console.error("[agenda] afterLogin erro:", e);
     const msg = (e && (e.message || e.error_description || JSON.stringify(e))) || "erro desconhecido";
@@ -697,6 +765,9 @@ function signOut() {
   clearInterval(refreshTimer);
   clearEventsCache();
   clearPermissionDeniedCache();
+  notifEnabled = false;
+  saveNotifEnabled();
+  updateNotifBtn();
   show("login");
 }
 
@@ -907,6 +978,8 @@ function initTheme() {
 
 async function boot() {
   initTheme();
+  loadNotifEnabled();
+  updateNotifBtn();
   checkPendingUpdate();
   el("loginBtn").onclick = signIn;
   el("loginBtn2").onclick = signIn;
@@ -948,16 +1021,7 @@ async function boot() {
   }
   const testNotifBtn = el("testNotifBtn");
   if (testNotifBtn) {
-    testNotifBtn.onclick = async () => {
-      if (!("Notification" in window)) { toast("Notificacoes nao suportadas."); return; }
-      let perm = Notification.permission;
-      if (perm === "default") perm = await Notification.requestPermission();
-      if (perm === "granted") {
-        toast("Notificacoes ativadas");
-      } else {
-        toast("Permissao de notificacao negada.");
-      }
-    };
+    testNotifBtn.onclick = toggleNotifPermission;
   }
   window.addEventListener("online", () => {
     el("offlinePill").classList.remove("show");
