@@ -702,7 +702,7 @@ async function afterLogin() {
     } else {
       throw new Error("SHEET_NAME_INVALID");
     }
-    await loadEvents();
+    await loadEventsFresh();
     autoEnableNotifForHighNotes();
     selectedDate = startOfDay(new Date());
     show("app");
@@ -811,19 +811,27 @@ function clearPermissionDeniedCache() {
 }
 
 async function loadEvents() {
+  await loadEventsInner(false);
+}
+async function loadEventsFresh() {
+  await loadEventsInner(true);
+}
+async function loadEventsInner(force) {
   if (!(await ensureValidToken())) return;
   if (isPermissionDeniedCached()) {
     throw new Error("PERMISSION_DENIED_CACHED");
   }
-  const cached = getCachedEvents();
-  if (cached && cached.length) {
-    eventsByDate = new Map();
-    for (const item of cached) {
-      eventsByDate.set(item.key, item.evs);
+  if (!force) {
+    const cached = getCachedEvents();
+    if (cached && cached.length) {
+      eventsByDate = new Map();
+      for (const item of cached) {
+        eventsByDate.set(item.key, item.evs);
+      }
+      lastSync = new Date();
+      updateSyncInfo();
+      return;
     }
-    lastSync = new Date();
-    updateSyncInfo();
-    return;
   }
   const range = `'${CONFIG.SHEET_NAME}'!A:G`;
   let lastErr = null;
@@ -926,11 +934,11 @@ async function saveEvent(ev) {
 function scheduleRefresh() {
   clearInterval(refreshTimer);
   refreshTimer = setInterval(async () => {
-    try { await loadEvents(); autoEnableNotifForHighNotes(); render(); checkNotifNow(); } catch (_) {}
+    try { await loadEventsFresh(); autoEnableNotifForHighNotes(); render(); checkNotifNow(); } catch (_) {}
   }, CONFIG.REFRESH_MIN * 60000);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && accessToken) {
-      loadEvents().then((r) => { autoEnableNotifForHighNotes(); render(); }).catch(() => {});
+      loadEventsFresh().then((r) => { autoEnableNotifForHighNotes(); render(); }).catch(() => {});
     }
   });
 }
@@ -979,7 +987,7 @@ async function boot() {
   el("logoutBtn").onclick = signOut;
   el("refreshBtn").onclick = async () => {
     showLoading(true, "Atualizando…");
-    try { await loadEvents(); render(); toast("Atualizado"); }
+    try { await loadEventsFresh(); render(); toast("Atualizado"); }
     catch (e) { toast("Erro ao atualizar"); }
     finally { showLoading(false); }
   };
@@ -988,7 +996,7 @@ async function boot() {
     hasUpdatePending = false;
     updatePendingBtn();
     showLoading(true, "Atualizando…");
-    try { await loadEvents(); render(); toast("Atualizado"); }
+    try { await loadEventsFresh(); render(); toast("Atualizado"); }
     catch (e) { toast("Erro ao atualizar"); }
     finally { showLoading(false); }
   };
@@ -1031,7 +1039,7 @@ async function boot() {
   }
   window.addEventListener("online", () => {
     el("offlinePill").classList.remove("show");
-    if (accessToken) loadEvents().then(render).catch(() => {});
+    if (accessToken) loadEventsFresh().then(render).catch(() => {});
   });
   window.addEventListener("offline", () => el("offlinePill").classList.add("show"));
 
