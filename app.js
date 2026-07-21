@@ -441,6 +441,7 @@ async function toggleNotifPermission() {
     saveNotifEnabled();
     updateNotifBtn();
     toast(notifEnabled ? "Notificacoes ativadas" : "Notificacoes desativadas");
+    if (notifEnabled) checkNotifNow(true);
   } else {
     toast("Permissao de notificacao negada.");
   }
@@ -470,9 +471,20 @@ async function checkNotifNow(autoOpen) {
   notifIndex = 0;
   const { ev, mins } = queue[0];
   const reps = (ev.rep || "").split(",").map((s) => s.trim()).filter(Boolean);
-  if (reps.length && (ev.presence === "Não" || ev.presence === "Reservar")) {
+  const hasReps = reps.length && (ev.presence === "Não" || ev.presence === "Reservar");
+  const showModal = autoOpen || hasReps;
+  if (showModal && hasReps) {
+    showNotifModal(ev, reps, mins, queue.length > 1);
+  } else if (showModal && !hasReps) {
     showNotifModal(ev, reps, mins, queue.length > 1);
   }
+  const body = mins > 0
+    ? `Inicia em ${mins} minuto(s) — ${ev.event || "Evento"}`
+    : `🕑 ${ev.time || ""} — ${ev.event || "Evento"}`;
+  new Notification("Agenda do Prefeito", {
+    body,
+    icon: "icon.svg",
+  });
 }
 
 let currentNotifOverlay = null;
@@ -532,7 +544,10 @@ function showNotifModal(ev, reps, mins, hasMore) {
 
 function openPicker(row) {
   const {ev} = findEventByRow(row);
-  if (!ev) return;
+  if (!ev) {
+    toast("Evento não encontrado para este representante.");
+    return;
+  }
   const current = (ev.rep || "").split(",").map((s) => s.trim()).filter(Boolean);
   const others = current.filter((c) => !PEOPLE.includes(c));
   const sel = new Set(current);
@@ -932,11 +947,11 @@ async function saveEvent(ev) {
 function scheduleRefresh() {
   clearInterval(refreshTimer);
   refreshTimer = setInterval(async () => {
-    try { await loadEventsFresh(); render(); } catch (_) {}
+    try { await loadEventsFresh(); render(); if (notifEnabled) checkNotifNow(); } catch (_) {}
   }, CONFIG.REFRESH_MIN * 60000);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && accessToken) {
-      loadEventsFresh().then((r) => { render(); }).catch(() => {});
+      loadEventsFresh().then((r) => { render(); if (notifEnabled) checkNotifNow(); }).catch(() => {});
     }
   });
 }
