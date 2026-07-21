@@ -531,6 +531,7 @@ function showNotifModal(ev, reps, mins, hasMore) {
 /* ---------- modais ---------- */
 
 function openPicker(row) {
+  const {ev} = findEventByRow(row);
   if (!ev) return;
   const current = (ev.rep || "").split(",").map((s) => s.trim()).filter(Boolean);
   const others = current.filter((c) => !PEOPLE.includes(c));
