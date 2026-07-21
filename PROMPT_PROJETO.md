@@ -172,32 +172,26 @@ Crie um PWA chamado "Agenda do Prefeito" com as seguintes especificações:
    - Busca por texto no nome do evento, local ou participantes
    - Ordenação dos eventos por horário (cronológica)
 
-4. EVENT CARDS:
-   - Mostrar horário, título, nota, local, participantes
-   - Badges coloridos por status (verde=Sim, vermelho=Não, amarelo=Reservar)
-   - Botões de ação: Vou, Não vou, Reservar
-   - Botão "Selecionar quem vai no lugar" (sempre visível, não importa o status)
-   - Botão de sino por evento para ativar notificação (1h antes)
-   - Botão de local com link para Google Maps
+ 4. EVENT CARDS:
+    - Mostrar horário, título, nota, local, participantes
+    - Badges coloridos por status (verde=Sim, vermelho=Não, amarelo=Reservar)
+    - Botões de ação: Vou, Não vou, Reservar
+    - Botão "Selecionar representante/acompanhante" (sempre visível)
+    - Botão de local com link para Google Maps
 
  5. NOTIFICAÇÕES:
-    - Notificação por evento (ícone no card, sem sino)
-    - Regras de ativação automática:
-      - Nota 9 ou 10: ativa automaticamente
-      - Presença "Sim": ativa automaticamente
-      - Usuário pode ativar/desativar manualmente também
-    - Aviso inteligente baseado no horário:
-      - Se evento já ocorreu (dia anterior ou horário passou): "Este evento ja ocorreu."
-      - Se evento está ocorrendo agora: "Este evento ja esta ocorrendo ou ja ocorreu."
-      - Se evento inicia em menos de 1h: "O evento iniciara em X minuto(s)."
-      - Se evento é mais de 1h: "Voce recebera uma notificacao 1h antes do evento."
-    - Modal de notificação para representantes:
-      - Quando presença for "Não" ou "Reservar" e houver representantes selecionados
-      - Mostra: "Evento X será realizado daqui Y min e os representantes N1, N2 irão comparecer"
-      - Botão X para fechar e confirmar que a pessoa viu
-    - Botão de teste de notificação no header
+    - Sem botão de sino por evento (notificação totalmente automática)
+    - Ativação automática se nota 9 ou 10
+    - Ativação automática ao confirmar "Vou"
+    - Ao marcar "Não vou" ou "Reservar" com representantes, exibir modal com:
+      - Nome do evento
+      - Data, horário e local
+      - Lista de representantes que irão comparecer
+      - Botão "Fechar" para confirmação de leitura
+    - Modal aparece automaticamente no login se houver evento < 1h com representantes
+    - Notificação nativa do sistema 1h antes do evento (apenas com app aberto)
     - Padrão Google: usa Notification API nativa do navegador
-    - No mobile: aparece como notificação nativa do sistema (Android/iOS)
+    - Validação: não permite notificação para eventos já ocorridos
     - Persistência da preferência em localStorage
 
 6. GOOGLE MAPS:

@@ -112,7 +112,7 @@ Solicitado pela Secretária e Subsecretário a verificação de proposta de apli
 | **Offline** | Service Worker permite uso sem internet |
 | **Escalável** | Google Sheets aguenta milhares de linhas |
 | **Segurança** | Autenticação via Google, sem senhas locais |
-| **Notificações nativas** | Usa API padrão do navegador/sistema |
+| **Notificações nativas** | Usa API padrão do navegador/sistema (totalmente automática, sem botão de sino por evento) |
 | **Versionamento** | Git para controle de alterações |
 | **Deploy automático** | GitHub Pages publica automaticamente |
 
