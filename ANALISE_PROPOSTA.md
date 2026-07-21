@@ -389,3 +389,116 @@ namespace AgendaPrefeito.BLL.Services
 **Documento elaborado em:** 21/07/2026  
 **Responsável:** Equipe de Desenvolvimento  
 **Aprovação:** Secretária e Subsecretário
+
+---
+
+## 11. Prompt para Recriar o Projeto do Zero (Estado Atual)
+
+Use este prompt para reconstruir o projeto exatamente como está hoje:
+
+```
+Crie um PWA chamado "Agenda do Prefeito" com as seguintes especificações:
+
+1. AUTHENTICATION:
+   - Login com Google OAuth 2.0
+   - Token salvo em localStorage com expiração
+   - Logout funcional
+   - Renovação silenciosa de token (sessão de até 24h)
+   - Bloqueio de acesso se não tiver permissão na planilha (erro 403/401)
+
+2. GOOGLE SHEETS INTEGRATION:
+   - Ler dados da planilha usando Google Sheets API v4
+   - Colunas: Data | Horário | Evento | Nota | Presença | Quem vai no lugar | Local
+   - Suportar data em formato Excel serial (ex: 45934) ou texto (DD/MM/AAAA)
+   - Salvar alterações (presença, participantes, local) de volta na planilha
+   - Retry automático em caso de erro de rede (2 tentativas)
+   - Timeout de 15s para requisições
+
+3. UI/UX:
+   - Tema escuro/claro com alternância
+   - Layout mobile-first responsivo
+   - Três modos de visualização: Dia, Semana, Mês
+   - Navegação entre datas com botões ‹ › e botão Hoje
+   - Indicador visual no botão "Hoje" quando for o dia atual
+   - Filtro por status: Todos, Confirmados, Não vou, Reservar
+   - Busca por texto no nome do evento, local ou representante
+   - Ordenação dos eventos por horário (cronológica)
+   - Cores de nota: 1-6 cinza, 7-8 laranja, 9-10 azul
+
+4. EVENT CARDS:
+   - Mostrar horário, título, nota, local, representantes
+   - Badges coloridos por status (verde=Sim, vermelho=Não, amarelo=Reservar)
+   - Botões de ação: Vou, Não vou, Reservar
+   - Botão "Selecionar representante/acompanhante" (sempre visível)
+   - Ícone de notificação 🔕/🔔 por evento
+   - Botão de local com link para Google Maps
+
+5. NOTIFICAÇÕES:
+   - Notificação por evento (ícone no card)
+   - Ativação automática se nota 9 ou 10
+   - Ativação automática ao confirmar "Vou"
+   - Ao marcar "Não vou" ou "Reservar" com representantes, exibir modal com:
+     - Nome do evento
+     - Data, horário e local
+     - Lista de representantes que irão comparecer
+     - Botão "Fechar" para confirmação de leitura
+   - Notificação nativa do sistema 1h antes do evento
+   - Botão de teste de notificação no header
+   - Padrão Google: usa Notification API nativa do navegador
+   - Validação: não permite notificação para eventos já ocorridos
+   - Mensagem dinâmica: informa minutos restantes se estiver dentro de 1h
+   - Persistência da preferência em localStorage
+
+6. GOOGLE MAPS:
+   - Modal para informar local do evento
+   - Link "Abrir no Google Maps" quando já houver endereço
+   - Abre o Maps automaticamente ao salvar local
+
+7. OFFLINE/CACHE:
+   - Service Worker para cache
+   - Botão "Atualização pendente" se cache desatualizado
+   - Funciona offline com dados em cache
+
+8. CONFIGURAÇÕES:
+   - Arquivo config.js separado com:
+     - CLIENT_ID (Google OAuth)
+     - SPREADSHEET_ID (ID da planilha)
+     - SHEET_NAME (nome da aba)
+     - SCOPES (escopo da API)
+     - REFRESH_MIN (intervalo de atualização)
+     - PEOPLE (lista de pessoas para o picker)
+     - NOTIF_ADVANCE_MIN (minutos de antecedência da notificação)
+   - Arquivo config.example.js como template
+
+9. TECNOLOGIAS:
+   - HTML/CSS/JS puro (sem frameworks)
+   - PWA com manifest e service worker
+   - Compatível com iOS/Safari
+   - GitHub Pages para deploy
+
+10. BRANCHES SUGERIDAS:
+    - main: versão estável
+    - melhorias: funcionalidades novas
+    - modelo-inicial: cópia limpa da main
+
+Crie todos os arquivos necessários, com código limpo, comentado e pronto para uso.
+```
+
+---
+
+## 12. Estrutura do Projeto
+
+```
+AgendaPlanilha/
+├── index.html               # Página principal do app
+├── app.js                   # Lógica do aplicativo
+├── config.js                # Configurações (não commitado)
+├── config.example.js        # Exemplo de configuração
+├── manifest.webmanifest     # Arquivo PWA
+├── sw.js                    # Service Worker (cache offline)
+├── icon.svg                 # Ícone do app
+├── PROMPT_PROJETO.md        # Documentação do projeto
+├── ANALISE_PROPOSTA.md      # Este documento
+└── .github/
+    └── workflows/           # Deploy automático (se houver)
+```
