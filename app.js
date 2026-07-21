@@ -363,7 +363,11 @@ function wireCards(list) {
     };
   });
   list.querySelectorAll("button.pickbtn").forEach((b) => {
-    b.onclick = () => openPicker(Number(b.dataset.row));
+    console.log("[agenda] wireCards pickbtn row:", b.dataset.row);
+    b.onclick = () => {
+      console.log("[agenda] pickbtn clicado, row:", b.dataset.row);
+      openPicker(Number(b.dataset.row));
+    };
   });
   list.querySelectorAll("button.locbtn").forEach((b) => {
     b.onclick = () => openLoc(Number(b.dataset.row));
@@ -471,12 +475,9 @@ async function checkNotifNow(autoOpen) {
   notifIndex = 0;
   const { ev, mins } = queue[0];
   const reps = (ev.rep || "").split(",").map((s) => s.trim()).filter(Boolean);
-  const hasReps = reps.length && (ev.presence === "Não" || ev.presence === "Reservar");
-  const showModal = autoOpen || hasReps;
-  if (showModal && hasReps) {
-    showNotifModal(ev, reps, mins, queue.length > 1);
-  } else if (showModal && !hasReps) {
-    showNotifModal(ev, reps, mins, queue.length > 1);
+  const showModal = autoOpen || reps.length;
+  if (showModal) {
+    showNotifModal(ev, reps, mins);
   }
   const body = mins > 0
     ? `Inicia em ${mins} minuto(s) — ${ev.event || "Evento"}`
@@ -488,8 +489,11 @@ async function checkNotifNow(autoOpen) {
 }
 
 let currentNotifOverlay = null;
-function showNotifModal(ev, reps, mins, hasMore) {
+function showNotifModal(ev, reps, mins, hasMoreParam) {
   if (currentNotifOverlay) currentNotifOverlay.remove();
+  const remaining = Math.max(0, notifQueue.length - notifIndex - 1);
+  const isLast = remaining <= 0;
+  const hasMore = remaining > 0;
   const overlay = document.createElement("div");
   overlay.className = "overlay";
   const repList = reps.map((r) => `<li>${escapeHtml(r)}</li>`).join("");
@@ -498,9 +502,8 @@ function showNotifModal(ev, reps, mins, hasMore) {
   const timeStr = ev.time ? `às ${escapeHtml(ev.time)}` : "";
   const localStr = ev.local ? `Local: ${escapeHtml(ev.local)}` : "";
   const details = [dateStr, timeStr, localStr].filter(Boolean).join("<br>");
-  const isLast = !hasMore && notifIndex >= notifQueue.length - 1;
   const navHtml = hasMore
-    ? `<button class="primary" id="notifNext">Proximo aviso (${notifQueue.length - notifIndex - 1} restantes)</button>`
+    ? `<button class="primary" id="notifNext">Proximo aviso (${remaining} restantes)</button>`
     : "";
   overlay.innerHTML = `
     <div class="modal notif-modal">
@@ -521,7 +524,8 @@ function showNotifModal(ev, reps, mins, hasMore) {
     notifIndex = 0;
   };
   if (isLast) {
-    overlay.querySelector("#notifModalClose").onclick = close;
+    const closeBtn = overlay.querySelector("#notifModalClose");
+    if (closeBtn) closeBtn.onclick = close;
   }
   if (hasMore) {
     const nextBtn = overlay.querySelector("#notifNext");
@@ -529,11 +533,13 @@ function showNotifModal(ev, reps, mins, hasMore) {
       nextBtn.onclick = async () => {
         overlay.remove();
         notifIndex += 1;
-        const nextIdx = notifIndex % notifQueue.length;
-        const nextItem = notifQueue[nextIdx];
+        const nextItem = notifQueue[notifIndex];
+        if (!nextItem) {
+          close();
+          return;
+        }
         const nextReps = (nextItem.ev.rep || "").split(",").map((s) => s.trim()).filter(Boolean);
-        const more = notifQueue.length > 1;
-        showNotifModal(nextItem.ev, nextReps, nextItem.mins, more);
+        showNotifModal(nextItem.ev, nextReps, nextItem.mins, false);
       };
     }
   }
@@ -543,11 +549,14 @@ function showNotifModal(ev, reps, mins, hasMore) {
 /* ---------- modais ---------- */
 
 function openPicker(row) {
+  console.log("[agenda] openPicker clicado, row:", row);
   const {ev} = findEventByRow(row);
   if (!ev) {
+    console.warn("[agenda] openPicker: evento nao encontrado para row:", row);
     toast("Evento não encontrado para este representante.");
     return;
   }
+  console.log("[agenda] openPicker: evento encontrado:", ev.event || "(sem título)");
   const current = (ev.rep || "").split(",").map((s) => s.trim()).filter(Boolean);
   const others = current.filter((c) => !PEOPLE.includes(c));
   const sel = new Set(current);
