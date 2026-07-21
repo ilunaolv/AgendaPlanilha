@@ -20,7 +20,8 @@ let viewMode = "dia";
 let lastSync = null;
 let refreshTimer = null;
 let hasUpdatePending = false;
-const LAST_VERSION_KEY = "agenda_last_version";
+const LAST_BUILD_KEY = "agenda_app_build";
+const APP_BUILD = "2026.07.21.2";
 let currentFilter = "todos";
 let searchQuery = "";
 let isRefreshingToken = false;
@@ -405,12 +406,8 @@ function updatePendingBtn() {
   btn.style.display = hasUpdatePending ? "block" : "none";
 }
 function checkPendingUpdate() {
-  const savedVer = localStorage.getItem(LAST_VERSION_KEY);
-  const curVer = "v" + new Date().toISOString().slice(0, 10);
-  hasUpdatePending = savedVer !== curVer;
-  if (hasUpdatePending) {
-    localStorage.setItem(LAST_VERSION_KEY, curVer);
-  }
+  const savedVer = localStorage.getItem(LAST_BUILD_KEY);
+  hasUpdatePending = savedVer !== APP_BUILD;
   updatePendingBtn();
 }
 
@@ -477,10 +474,10 @@ async function checkNotifNow(autoOpen) {
   const reps = (ev.rep || "").split(",").map((s) => s.trim()).filter(Boolean);
   const showModal = autoOpen || reps.length;
   if (showModal) {
-    showNotifModal(ev, reps, mins);
+    showNotifModal(ev, reps, mins, queue.length);
   }
   const body = mins > 0
-    ? `Inicia em ${mins} minuto(s) — ${ev.event || "Evento"}`
+    ? ? `Inicia em ${mins} minuto(s) — ${ev.event || "Evento"}`
     : `🕑 ${ev.time || ""} — ${ev.event || "Evento"}`;
   new Notification("Agenda do Prefeito", {
     body,
@@ -489,9 +486,11 @@ async function checkNotifNow(autoOpen) {
 }
 
 let currentNotifOverlay = null;
+let notifNavigating = false;
 function showNotifModal(ev, reps, mins, hasMoreParam) {
   if (currentNotifOverlay) currentNotifOverlay.remove();
-  const remaining = Math.max(0, notifQueue.length - notifIndex - 1);
+  const safeIdx = Math.min(notifIndex, Math.max(0, notifQueue.length - 1));
+  const remaining = Math.max(0, notifQueue.length - safeIdx - 1);
   const isLast = remaining <= 0;
   const hasMore = remaining > 0;
   const overlay = document.createElement("div");
@@ -522,6 +521,7 @@ function showNotifModal(ev, reps, mins, hasMoreParam) {
     currentNotifOverlay = null;
     notifQueue = [];
     notifIndex = 0;
+    notifNavigating = false;
   };
   if (isLast) {
     const closeBtn = overlay.querySelector("#notifModalClose");
@@ -531,15 +531,21 @@ function showNotifModal(ev, reps, mins, hasMoreParam) {
     const nextBtn = overlay.querySelector("#notifNext");
     if (nextBtn) {
       nextBtn.onclick = async () => {
-        overlay.remove();
-        notifIndex += 1;
-        const nextItem = notifQueue[notifIndex];
-        if (!nextItem) {
-          close();
-          return;
+        if (notifNavigating) return;
+        notifNavigating = true;
+        try {
+          overlay.remove();
+          notifIndex = Math.min(notifIndex + 1, notifQueue.length - 1);
+          const nextItem = notifQueue[notifIndex];
+          if (!nextItem) {
+            close();
+            return;
+          }
+          const nextReps = (nextItem.ev.rep || "").split(",").map((s) => s.trim()).filter(Boolean);
+          showNotifModal(nextItem.ev, nextReps, nextItem.mins, false);
+        } finally {
+          notifNavigating = false;
         }
-        const nextReps = (nextItem.ev.rep || "").split(",").map((s) => s.trim()).filter(Boolean);
-        showNotifModal(nextItem.ev, nextReps, nextItem.mins, false);
       };
     }
   }
@@ -1019,10 +1025,12 @@ async function boot() {
   if (upBtn) upBtn.onclick = async () => {
     hasUpdatePending = false;
     updatePendingBtn();
-    showLoading(true, "Atualizando…");
-    try { await loadEventsFresh(); render(); toast("Atualizado"); }
-    catch (e) { toast("Erro ao atualizar"); }
-    finally { showLoading(false); }
+    try {
+      localStorage.setItem(LAST_BUILD_KEY, APP_BUILD);
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) await reg.update();
+    } catch (_) {}
+    location.reload();
   };
   el("prevDay").onclick = navPrev;
   el("nextDay").onclick = navNext;
