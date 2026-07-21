@@ -25,6 +25,10 @@ let currentFilter = "todos";
 let searchQuery = "";
 let isRefreshingToken = false;
 let tokenRefreshPromise = null;
+const EVENTS_CACHE_KEY = "agenda_events_cache";
+const EVENTS_CACHE_TTL_MS = 2 * 60 * 1000;
+const PERMISSION_DENIED_CACHE_KEY = "agenda_permission_denied";
+const PERMISSION_DENIED_TTL_MS = 10 * 60 * 1000;
 
 /* ---------- persistência de token ---------- */
 
@@ -693,6 +697,9 @@ async function afterLogin() {
   showLoading(true, "Carregando agenda…");
   try {
     await ensureGapi();
+    if ((CONFIG.SHEET_NAME || "").trim().toLowerCase() !== "prefeito") {
+      throw new Error("SHEET_NAME_INVALID");
+    }
     await loadEvents();
     autoEnableNotifForHighNotes();
     selectedDate = startOfDay(new Date());
@@ -706,6 +713,18 @@ async function afterLogin() {
     const msg = (e && (e.message || e.error_description || JSON.stringify(e))) || "erro desconhecido";
     if (msg === "PERMISSION_DENIED" || String(msg).toLowerCase().includes("permission") || String(msg).includes("403")) {
       toast("Acesso negado: você não tem permissão para esta planilha.");
+      clearToken();
+      gapi.client.setToken(null);
+      accessToken = null;
+      show("login");
+    } else if (msg === "PERMISSION_DENIED_CACHED") {
+      toast("Acesso negado: você não tem permissão para esta planilha.");
+      clearToken();
+      gapi.client.setToken(null);
+      accessToken = null;
+      show("login");
+    } else if (msg === "SHEET_NAME_INVALID") {
+      toast("Configuracao invalida: a aba da planilha deve ser 'Prefeito'.");
       clearToken();
       gapi.client.setToken(null);
       accessToken = null;
@@ -748,11 +767,62 @@ function signOut() {
   gapi.client.setToken(null);
   accessToken = null;
   clearInterval(refreshTimer);
+  clearEventsCache();
+  clearPermissionDeniedCache();
   show("login");
+}
+
+function getCachedEvents() {
+  try {
+    const raw = localStorage.getItem(EVENTS_CACHE_KEY);
+    if (!raw) return null;
+    const { data, ts } = JSON.parse(raw);
+    if (Date.now() - ts > EVENTS_CACHE_TTL_MS) return null;
+    return data;
+  } catch (_) { return null; }
+}
+function setCachedEvents(data) {
+  try {
+    localStorage.setItem(EVENTS_CACHE_KEY, JSON.stringify({ data, ts: Date.now() }));
+  } catch (_) {}
+}
+function clearEventsCache() {
+  try { localStorage.removeItem(EVENTS_CACHE_KEY); } catch (_) {}
+}
+function cachePermissionDenied() {
+  try { localStorage.setItem(PERMISSION_DENIED_CACHE_KEY, String(Date.now())); } catch (_) {}
+}
+function isPermissionDeniedCached() {
+  try {
+    const raw = localStorage.getItem(PERMISSION_DENIED_CACHE_KEY);
+    if (!raw) return false;
+    const ts = Number(raw);
+    if (Date.now() - ts > PERMISSION_DENIED_TTL_MS) {
+      localStorage.removeItem(PERMISSION_DENIED_CACHE_KEY);
+      return false;
+    }
+    return true;
+  } catch (_) { return false; }
+}
+function clearPermissionDeniedCache() {
+  try { localStorage.removeItem(PERMISSION_DENIED_CACHE_KEY); } catch (_) {}
 }
 
 async function loadEvents() {
   if (!(await ensureValidToken())) return;
+  if (isPermissionDeniedCached()) {
+    throw new Error("PERMISSION_DENIED_CACHED");
+  }
+  const cached = getCachedEvents();
+  if (cached && cached.length) {
+    eventsByDate = new Map();
+    for (const item of cached) {
+      eventsByDate.set(item.key, item.evs);
+    }
+    lastSync = new Date();
+    updateSyncInfo();
+    return;
+  }
   const range = `'${CONFIG.SHEET_NAME}'!A:G`;
   let lastErr = null;
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -798,11 +868,18 @@ async function loadEvents() {
       if (!loaded) console.warn("[agenda] nenhum evento válido — verifique colunas/data/horário/evento");
       lastSync = new Date();
       updateSyncInfo();
+      const cacheData = [];
+      for (const [key, evs] of eventsByDate) {
+        cacheData.push({ key, evs });
+      }
+      setCachedEvents(cacheData);
+      clearPermissionDeniedCache();
       return;
     } catch (e) {
       lastErr = e;
       const status = (e && e.result && e.result.status) || (e && e.status) || 0;
       if (status === 403 || status === 401) {
+        cachePermissionDenied();
         throw new Error("PERMISSION_DENIED");
       }
       console.error(`[agenda] loadEvents tentativa ${attempt} erro:`, e);
@@ -834,6 +911,7 @@ async function saveEvent(ev) {
       valueInputOption: "RAW", values: [[ev.local || ""]],
     });
     toast("Salvo na planilha ✓");
+    clearEventsCache();
     await loadEvents();
     render();
   } catch (e) {

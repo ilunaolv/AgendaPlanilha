@@ -151,12 +151,16 @@ Crie um PWA chamado "Agenda do Prefeito" com as seguintes especificações:
    - Logout funcional
    - Bloqueio de acesso se não tiver permissão na planilha (erro 403/401)
 
-2. GOOGLE SHEETS INTEGRATION:
-   - Ler dados da planilha usando Google Sheets API v4
-   - Colunas: Data | Horário | Evento | Nota | Presença | Quem vai no lugar | Local
-   - Suportar data em formato Excel serial (ex: 45934) ou texto (DD/MM/AAAA)
-   - Salvar alterações (presença, participantes, local) de volta na planilha
-   - Retry automático em caso de erro de rede
+ 2. GOOGLE SHEETS INTEGRATION:
+    - Ler dados da planilha usando Google Sheets API v4
+    - Colunas: Data | Horário | Evento | Nota | Presença | Quem vai no lugar | Local
+    - Suportar data em formato Excel serial (ex: 45934) ou texto (DD/MM/AAAA)
+    - Salvar alterações (presença, participantes, local) de volta na planilha
+    - Retry automático em caso de erro de rede
+    - Restrição de acesso: app bloqueia se SHEET_NAME for diferente de "Prefeito"
+    - Cache de autenticação para reduzir chamadas ao Google
+    - Cache de eventos em localStorage (TTL de 2 minutos)
+    - Cache de permissão negada (TTL de 10 minutos) para evitar requisições repetidas
 
 3. UI/UX:
    - Tema escuro/claro com alternância
@@ -201,20 +205,26 @@ Crie um PWA chamado "Agenda do Prefeito" com as seguintes especificações:
    - Link "Abrir no Google Maps" quando já houver endereço
    - Abre o Maps automaticamente ao salvar local
 
-7. OFFLINE/CACHE:
-   - Service Worker para cache
-   - Botão "Atualização pendente" se cache desatualizado
-   - Funciona offline com dados em cache
+ 7. OFFLINE/CACHE:
+    - Service Worker para cache
+    - Cache de autenticação para reduzir chamadas ao Google
+    - Cache de eventos em localStorage (TTL de 2 minutos)
+    - Cache de permissão negada (TTL de 10 minutos) para evitar requisições repetidas
+    - Botão "Atualização pendente" se cache desatualizado
+    - Funciona offline com dados em cache
+    - Limpeza automática de cache ao fazer logout ou salvar evento
 
-8. CONFIGURAÇÕES:
-   - Arquivo config.js separado com:
-     - CLIENT_ID (Google OAuth)
-     - SPREADSHEET_ID (ID da planilha)
-     - SHEET_NAME (nome da aba)
-     - SCOPES (escopo da API)
-     - REFRESH_MIN (intervalo de atualização)
-     - PEOPLE (lista de pessoas para o picker)
-   - Arquivo config.example.js como template
+ 8. CONFIGURAÇÕES:
+    - Arquivo config.js separado com:
+      - CLIENT_ID (Google OAuth)
+      - SPREADSHEET_ID (ID da planilha)
+      - SHEET_NAME (nome da aba, deve ser exatamente "Prefeito")
+      - SCOPES (escopo da API)
+      - REFRESH_MIN (intervalo de atualização)
+      - NOTIF_ADVANCE_MIN (minutos de antecedência da notificação)
+      - PEOPLE (lista de pessoas para o picker)
+    - Arquivo config.example.js como template
+    - Restrição de acesso: app bloqueia se SHEET_NAME for diferente de "Prefeito"
 
 9. TECNOLOGIAS:
    - HTML/CSS/JS puro (sem frameworks)
@@ -248,6 +258,18 @@ O app busca os dados da planilha de 5 em 5 minutos (configurável). Quando você
 
 ### O que é o Service Worker?
 É um arquivo que roda em segundo plano no navegador. Ele guarda os dados do app no celular para funcionar mesmo sem internet.
+
+### Como funciona o cache do app?
+O app usa 3 tipos de cache para melhorar performance:
+
+1. **Cache de autenticação:** salva o token do Google para não precisar logar toda hora
+2. **Cache de eventos:** guarda os eventos por 2 minutos para não ficar consultando o Google Sheets toda vez
+3. **Cache de permissão negada:** se o usuário não tiver acesso à planilha, cacheia essa informação por 10 minutos para não ficar consultando o Google repetidamente
+
+Quando você faz logout ou salva uma alteração, o cache é limpo automaticamente.
+
+### Como funciona a restrição de aba?
+O app verifica se a configuração `SHEET_NAME` é exatamente "Prefeito". Se for diferente, o app bloqueia o acesso e exibe uma mensagem de erro. Isso garante que apenas a aba correta seja acessada.
 
 ### Como funcionam as notificações?
 O app usa a **Notification API nativa do navegador** (padrão Google):

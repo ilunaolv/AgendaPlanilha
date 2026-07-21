@@ -74,6 +74,31 @@ Solicitado pela Secretária e Subsecretário a verificação de proposta de apli
 
 ---
 
+## 6.1. Cache e Performance
+
+### Cache de Autenticação
+- Token OAuth salvo em localStorage com renovação silenciosa
+- Reduz chamadas desnecessárias ao Google Identity
+- Sessão válida por até 24h sem novo login
+
+### Cache de Eventos
+- Eventos armazenados em localStorage com TTL de 2 minutos
+- Reduz requisições ao Google Sheets API
+- Melhora performance em aberturas subsequentes
+- Limpeza automática ao fazer logout ou salvar alterações
+
+### Cache de Permissão Negada
+- Usuários sem acesso à planilha têm permissão negada cacheada por 10 minutos
+- Evita requisições repetidas ao Google que resultariam em 403
+- Melhora experiência ao mostrar erro imediato sem espera
+
+### Restrição de Acesso
+- App valida se SHEET_NAME é exatamente "Prefeito"
+- Bloqueia execução se configurado para outra aba
+- Garante que apenas a aba correta seja acessada
+
+---
+
 ## 7. Prós e Contras da Solução Atual
 
 ### ✅ Prós

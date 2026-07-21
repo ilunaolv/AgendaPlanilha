@@ -3,9 +3,10 @@
 window.AGENDACONFIG = {
   CLIENT_ID: "SEU_CLIENT_ID.apps.googleusercontent.com",
   SPREADSHEET_ID: "ID_DA_PLANILHA",
-  SHEET_NAME: "Prefeito (Em testes)",
+  SHEET_NAME: "Prefeito",
   SCOPES: "https://www.googleapis.com/auth/spreadsheets",
   REFRESH_MIN: 15,
+  NOTIF_ADVANCE_MIN: 60,
   // Nomes disponíveis para selecionar como substituto (um ou mais).
   // Para adicionar mais, basta incluir novas linhas neste array.
   PEOPLE: [
