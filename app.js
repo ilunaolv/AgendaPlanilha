@@ -196,7 +196,7 @@ function sortEvents(arr) {
 }
 function normPresence(p) {
   if (p === "Sim") return "Sim";
-  if (p === "Reservar") return "Reservar";
+  if (p === "A confirmar") return "A confirmar";
   if (p === "Não" || p === "Nao") return "Não";
   return "";
 }
@@ -242,6 +242,13 @@ function eventCard(e) {
   const loc = e.local ? `<span class="tag loc">📍 ${escapeHtml(e.local)}</span>` : "";
   const sub = isNo && e.rep ? `<span class="tag rep">➡️ No lugar: ${escapeHtml(e.rep)}</span>` : "";
   const repTag = !isNo && e.rep ? `<span class="tag rep">👤 ${escapeHtml(e.rep)}</span>` : "";
+  const desc = e.description ? `
+    <button class="desc-toggle" data-row="${e.rowIndex}">
+      <span class="desc-arrow">▶</span> Descrição
+    </button>
+    <div class="desc-body" id="desc-${e.rowIndex}" style="display:none">
+      <div class="desc-text">${escapeHtml(e.description)}</div>
+    </div>` : "";
   const act = (val) => `mini${p === val ? " active-" + val.toLowerCase() : ""}`;
   const subField = `<button class="pickbtn" data-row="${e.rowIndex}">Selecionar representante/acompanhante</button>`;
   const locBtn = `<button class="locbtn" data-row="${e.rowIndex}">📍 ${e.local ? "Abrir no Maps" : "Informar local"}</button>`;
@@ -249,11 +256,11 @@ function eventCard(e) {
   <div class="card">
     <div class="time">🕑 ${escapeHtml(e.time || "—")} ${badge}</div>
     <div class="event">${escapeHtml(e.event || "(sem título)")}</div>
-    <div class="meta">${note}${loc}${repTag}${sub}</div>
+    <div class="meta">${note}${loc}${repTag}${sub}${desc}</div>
     <div class="actions">
       <button class="${act("Sim")}" data-act="sim" data-row="${e.rowIndex}">✓ Vou</button>
       <button class="${act("Não")}" data-act="nao" data-row="${e.rowIndex}">✕ Não vou</button>
-      <button class="${act("Reservar")}" data-act="res" data-row="${e.rowIndex}">⏳ Reservar</button>
+      <button class="${act("A confirmar")}" data-act="A confirmar" data-row="${e.rowIndex}">⏳ A confirmar</button>
     </div>
     ${locBtn}
     ${subField}
@@ -269,6 +276,7 @@ function getFilteredEvents(evs) {
     const q = searchQuery.toLowerCase();
     filtered = filtered.filter((ev) =>
       (ev.event || "").toLowerCase().includes(q) ||
+      (ev.description || "").toLowerCase().includes(q) ||
       (ev.local || "").toLowerCase().includes(q) ||
       (ev.rep || "").toLowerCase().includes(q)
     );
@@ -372,6 +380,17 @@ function wireCards(list) {
   });
   list.querySelectorAll("button.locbtn").forEach((b) => {
     b.onclick = () => openLoc(Number(b.dataset.row));
+  });
+  list.querySelectorAll("button.desc-toggle").forEach((b) => {
+    b.onclick = () => {
+      const row = Number(b.dataset.row);
+      const body = el("desc-" + row);
+      if (!body) return;
+      const open = body.style.display === "none";
+      body.style.display = open ? "block" : "none";
+      const arrow = b.querySelector(".desc-arrow");
+      if (arrow) arrow.textContent = open ? "▼" : "▶";
+    };
   });
 }
 
@@ -500,6 +519,7 @@ function showNotifModal(ev, reps, mins, hasMoreParam) {
   const dateStr = key ? fmtBig(parseKey(key)) : "";
   const timeStr = ev.time ? `às ${escapeHtml(ev.time)}` : "";
   const localStr = ev.local ? `Local: ${escapeHtml(ev.local)}` : "";
+  const descStr = ev.description ? `<p>📝 ${escapeHtml(ev.description)}</p>` : "";
   const details = [dateStr, timeStr, localStr].filter(Boolean).join("<br>");
   const navHtml = hasMore
     ? `<button class="primary" id="notifNext">Proximo aviso (${remaining} restantes)</button>`
@@ -509,6 +529,7 @@ function showNotifModal(ev, reps, mins, hasMoreParam) {
       <h3>Notificação de evento</h3>
       <p><b>${escapeHtml(ev.event || "Evento")}</b> será realizado daqui ${mins} minuto(s).</p>
       ${details ? `<p>${details}</p>` : ""}
+      ${descStr}
       <p>Os representantes/acompanhantes abaixo irão comparecer:</p>
       <ul class="rep-list">${repList}</ul>
       ${navHtml}
@@ -861,7 +882,7 @@ async function loadEventsInner(force) {
       return;
     }
   }
-  const range = `'${CONFIG.SHEET_NAME}'!A:G`;
+  const range = `'${CONFIG.SHEET_NAME}'!A:H`;
   let lastErr = null;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
@@ -895,6 +916,7 @@ async function loadEventsInner(force) {
           presence: (row[4] || "").trim(),
           rep: (row[5] || "").trim(),
           local: (row[6] || "").trim(),
+          description: (row[7] || "").trim(),
         };
         if (!ev.event && !ev.time) { skippedEmpty++; continue; }
         loaded++;
@@ -947,6 +969,11 @@ async function saveEvent(ev) {
       spreadsheetId: CONFIG.SPREADSHEET_ID,
       range: `'${sheet}'!G${ev.rowIndex}`,
       valueInputOption: "RAW", values: [[ev.local || ""]],
+    });
+    await gapi.client.sheets.spreadsheets.values.update({
+      spreadsheetId: CONFIG.SPREADSHEET_ID,
+      range: `'${sheet}'!H${ev.rowIndex}`,
+      valueInputOption: "RAW", values: [[ev.description || ""]],
     });
     toast("Salvo na planilha ✓");
     clearEventsCache();

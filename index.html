@@ -178,6 +178,13 @@
     .notif-modal .rep-list { margin: 10px 0; padding: 0; list-style: none; }
     .notif-modal .rep-list li { padding: 4px 0; }
     .notif-modal .close-btn { margin-top: 12px; }
+    .desc-toggle {
+      background: none; border: none; color: var(--accent); font: inherit;
+      padding: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .desc-toggle .desc-arrow { font-size: .7rem; transition: transform .2s; }
+    .desc-body { margin-top: 8px; padding: 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; }
+    .desc-text { font-size: .9rem; color: var(--text); line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
   </style>
 </head>
 <body>
@@ -186,6 +193,7 @@
     <div class="spacer"></div>
     <button id="themeBtn" title="Alternar tema">🌙</button>
     <button id="refreshBtn" title="Atualizar">↻</button>
+    
     <button id="testNotifBtn" title="Testar notificacao">🔔</button>
     <button id="loginBtn" class="primary">Acessar</button>
     <button id="logoutBtn" style="display:none">Sair</button>
@@ -221,7 +229,7 @@
         <button class="active" data-filter="todos">Todos</button>
         <button data-filter="Sim">Confirmados</button>
         <button data-filter="Não">Não vou</button>
-        <button data-filter="Reservar">Reservar</button>
+        <button data-filter="A confirmar">A confirmar</button>
       </div>
       <div class="searchbar">
         <input id="searchInput" type="text" placeholder="Buscar evento…" />
