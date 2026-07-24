@@ -20,8 +20,9 @@ let viewMode = "dia";
 let lastSync = null;
 let refreshTimer = null;
 let hasUpdatePending = false;
+let hasSheetUpdatePending = false;
 const LAST_BUILD_KEY = "agenda_app_build";
-const APP_BUILD = "2026.07.21.2";
+const APP_BUILD = "2026.07.21.3";
 let currentFilter = "todos";
 let searchQuery = "";
 let isRefreshingToken = false;
@@ -424,6 +425,36 @@ function updatePendingBtn() {
   if (!btn) return;
   btn.style.display = hasUpdatePending ? "block" : "none";
 }
+function setSheetUpdatePending(flag) {
+  hasSheetUpdatePending = !!flag;
+  updateRefreshBtnPending();
+}
+function updateRefreshBtnPending() {
+  const btn = el("refreshBtn");
+  if (!btn) return;
+  if (hasSheetUpdatePending) {
+    btn.style.background = "#f59e0b";
+    btn.style.color = "#fff";
+    btn.title = "Pendente atualização";
+  } else {
+    btn.style.background = "";
+    btn.style.color = "";
+    btn.title = "Atualizar";
+  }
+}
+function computeEventsFingerprint() {
+  const parts = [];
+  for (const [key, evs] of eventsByDate) {
+    for (const ev of evs) {
+      parts.push([
+        key, ev.rowIndex || "", ev.time || "", ev.event || "",
+        ev.note || "", ev.presence || "", ev.rep || "",
+        ev.local || "", ev.description || ""
+      ].join("|"));
+    }
+  }
+  return parts.join(";;");
+}
 function checkPendingUpdate() {
   const savedVer = localStorage.getItem(LAST_BUILD_KEY);
   hasUpdatePending = savedVer !== APP_BUILD;
@@ -749,6 +780,7 @@ async function afterLogin() {
       throw new Error("SHEET_NAME_INVALID");
     }
     await loadEventsFresh();
+    setSheetUpdatePending(false);
     selectedDate = startOfDay(new Date());
     show("app");
     render();
@@ -820,6 +852,7 @@ function signOut() {
   notifEnabled = false;
   saveNotifEnabled();
   updateNotifBtn();
+  setSheetUpdatePending(false);
   show("login");
 }
 
@@ -862,13 +895,18 @@ function clearPermissionDeniedCache() {
 async function loadEvents() {
   await loadEventsInner(false);
 }
-async function loadEventsFresh() {
-  await loadEventsInner(true);
+async function loadEventsFresh(suppressPending = false) {
+  await loadEventsInner(true, suppressPending);
 }
-async function loadEventsInner(force) {
+async function loadEventsInner(force, suppressPending = false) {
   if (!(await ensureValidToken())) return;
   if (isPermissionDeniedCached()) {
     throw new Error("PERMISSION_DENIED_CACHED");
+  }
+
+  let previousFingerprint = null;
+  if (force && !suppressPending && eventsByDate.size > 0) {
+    previousFingerprint = computeEventsFingerprint();
   }
   if (!force) {
     const cached = getCachedEvents();
@@ -934,6 +972,12 @@ async function loadEventsInner(force) {
       }
       setCachedEvents(cacheData);
       clearPermissionDeniedCache();
+      if (!suppressPending && previousFingerprint !== null) {
+        const newFingerprint = computeEventsFingerprint();
+        if (newFingerprint !== previousFingerprint) {
+          setSheetUpdatePending(true);
+        }
+      }
       return;
     } catch (e) {
       lastErr = e;
@@ -979,6 +1023,7 @@ async function saveEvent(ev) {
     clearEventsCache();
     await loadEvents();
     render();
+    setSheetUpdatePending(false);
   } catch (e) {
     toast("Erro ao salvar: " + e.message);
   } finally {
@@ -1044,7 +1089,7 @@ async function boot() {
   el("logoutBtn").onclick = signOut;
   el("refreshBtn").onclick = async () => {
     showLoading(true, "Atualizando…");
-    try { await loadEventsFresh(); render(); toast("Atualizado"); }
+    try { setSheetUpdatePending(false); await loadEventsFresh(true); render(); toast("Atualizado"); }
     catch (e) { toast("Erro ao atualizar"); }
     finally { showLoading(false); }
   };
