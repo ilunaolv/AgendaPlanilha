@@ -232,7 +232,7 @@ function eventCard(e) {
   const isNo = p === "Não";
   const badge =
     p === "Sim" ? `<span class="badge sim">Confirmado</span>`
-    : p === "Reservar" ? `<span class="badge res">Reservar</span>`
+    : p === "A confirmar" ? `<span class="badge confirmar">A confirmar</span>`
     : isNo ? `<span class="badge nao">Não comparece</span>` : "";
   const noteVal = noteNum(e.note);
   let noteCls = "note";
@@ -250,7 +250,10 @@ function eventCard(e) {
     <div class="desc-body" id="desc-${e.rowIndex}" style="display:none">
       <div class="desc-text">${escapeHtml(e.description)}</div>
     </div>` : "";
-  const act = (val) => `mini${p === val ? " active-" + val.toLowerCase() : ""}`;
+  const act = (val) => {
+    const slug = val.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-");
+    return `mini${p === val ? " active-" + slug : ""}`;
+  };
   const subField = `<button class="pickbtn" data-row="${e.rowIndex}">Selecionar representante/acompanhante</button>`;
   const locBtn = `<button class="locbtn" data-row="${e.rowIndex}">📍 ${e.local ? "Abrir no Maps" : "Informar local"}</button>`;
   return `
@@ -261,7 +264,7 @@ function eventCard(e) {
     <div class="actions">
       <button class="${act("Sim")}" data-act="sim" data-row="${e.rowIndex}">✓ Vou</button>
       <button class="${act("Não")}" data-act="nao" data-row="${e.rowIndex}">✕ Não vou</button>
-      <button class="${act("A confirmar")}" data-act="A confirmar" data-row="${e.rowIndex}">⏳ A confirmar</button>
+      <button class="${act("A confirmar")}" data-act="A confirmar" data-row="${e.rowIndex}">• A confirmar</button>
     </div>
     ${locBtn}
     ${subField}
@@ -351,7 +354,7 @@ function wireCards(list) {
     b.onclick = async () => {
       const {ev} = findEventByRow(Number(b.dataset.row));
       if (!ev) return;
-      ev.presence = b.dataset.act === "sim" ? "Sim" : b.dataset.act === "nao" ? "Não" : "Reservar";
+      ev.presence = b.dataset.act === "sim" ? "Sim" : b.dataset.act === "nao" ? "Não" : b.dataset.act === "A confirmar" ? "A confirmar" : "Reservar";
       if (ev.presence !== "Não") ev.rep = "";
       if ((ev.presence === "Não" || ev.presence === "Reservar") && ev.rep) {
         const reps = ev.rep.split(",").map((s) => s.trim()).filter(Boolean);
